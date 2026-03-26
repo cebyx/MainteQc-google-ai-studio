@@ -1,0 +1,160 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN') ||
+        (request.auth.token.email == "kaloussian.sebouh@hotmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isTechnician() {
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'TECHNICIAN'
+      );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasRequiredFields(['uid', 'role', 'fullName', 'email']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.role in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+             data.email is string && isValidEmail(data.email);
+    }
+
+    function isValidTicket() {
+      let data = request.resource.data;
+      return hasRequiredFields(['title', 'description', 'status', 'urgency', 'category', 'clientId', 'clientName', 'propertyId', 'propertyNickname', 'serviceAddress', 'createdByEmail', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.description is string && data.description.size() < 5000 &&
+             data.status in ['pending_review', 'approved', 'scheduled', 'on_the_way', 'arrived', 'in_progress', 'waiting_on_parts', 'completed', 'cancelled', 'rejected', 'unable_to_complete'] &&
+             data.urgency in ['low', 'medium', 'high', 'emergency'] &&
+             data.category is string && data.category.size() < 100 &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.clientName is string && data.clientName.size() < 100 &&
+             data.propertyId is string && data.propertyId.size() < 100 &&
+             data.propertyNickname is string && data.propertyNickname.size() < 100 &&
+             data.serviceAddress is string && data.serviceAddress.size() < 500 &&
+             data.createdByEmail is string && data.createdByEmail.size() < 100 &&
+             data.createdAt is string && data.createdAt.size() < 50;
+    }
+
+    function isValidProperty() {
+      let data = request.resource.data;
+      return hasRequiredFields(['clientId', 'nickname', 'address', 'city', 'state', 'zip', 'propertyType']) &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.nickname is string && data.nickname.size() > 0 && data.nickname.size() < 100 &&
+             data.address is string && data.address.size() > 0 && data.address.size() < 200 &&
+             data.city is string && data.city.size() > 0 && data.city.size() < 100 &&
+             data.state is string && data.state.size() > 0 && data.state.size() < 100 &&
+             data.zip is string && data.zip.size() > 0 && data.zip.size() < 20 &&
+             data.propertyType in ['residential', 'commercial'];
+    }
+
+    function isValidMessage() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'senderId', 'senderRole', 'recipientId', 'recipientRole', 'text', 'timestamp', 'read']) &&
+             data.ticketId is string && data.ticketId.size() > 0 && data.ticketId.size() < 100 &&
+             data.senderId is string && data.senderId.size() > 0 && data.senderId.size() < 100 &&
+             data.senderRole in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
+             data.recipientId is string && data.recipientId.size() > 0 && data.recipientId.size() < 100 &&
+             data.recipientRole in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 2000 &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             data.read is bool;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser() && (
+        isAdmin() || (isOwner(userId) && request.resource.data.role == 'CLIENT')
+      );
+      allow update: if isAuthenticated() && isValidUser() && (
+        isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /tickets/{ticketId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isOwner(resource.data.clientId) || 
+        resource.data.assignedTechnicianId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && isValidTicket() && (
+        isAdmin() || isOwner(request.resource.data.clientId)
+      );
+      allow update: if isAuthenticated() && isValidTicket() && (
+        isAdmin() || 
+        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId) || 
+        (resource.data.assignedTechnicianId == request.auth.uid && request.resource.data.clientId == resource.data.clientId)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /properties/{propertyId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isOwner(resource.data.clientId) || 
+        isTechnician()
+      );
+      allow create: if isAuthenticated() && isValidProperty() && (
+        isAdmin() || isOwner(request.resource.data.clientId)
+      );
+      allow update: if isAuthenticated() && isValidProperty() && (
+        isAdmin() || 
+        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isOwner(resource.data.senderId) || 
+        isOwner(resource.data.recipientId)
+      );
+      allow create: if isAuthenticated() && isValidMessage() && (
+        isAdmin() || isOwner(request.resource.data.senderId)
+      );
+      allow update: if isAuthenticated() && isValidMessage() && (
+        isAdmin() || 
+        isOwner(resource.data.recipientId) // Recipient can mark as read
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}

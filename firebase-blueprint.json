@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the system (admin, technician, or client)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "TECHNICIAN", "CLIENT"] },
+        "fullName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "specialties": { "type": "array", "items": { "type": "string" } },
+        "company": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "busy", "offline"] }
+      },
+      "required": ["uid", "role", "fullName", "email"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "A service request or job",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending_review", "approved", "scheduled", "on_the_way", "arrived", "in_progress", "waiting_on_parts", "completed", "cancelled", "rejected", "unable_to_complete"] },
+        "urgency": { "type": "string", "enum": ["low", "medium", "high", "emergency"] },
+        "category": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "propertyNickname": { "type": "string" },
+        "serviceAddress": { "type": "string" },
+        "scheduledDate": { "type": "string" },
+        "scheduledTime": { "type": "string" },
+        "assignedTechnicianId": { "type": "string" },
+        "assignedTechnicianName": { "type": "string" },
+        "adminNotes": { "type": "string" },
+        "technicianNotes": { "type": "string" },
+        "completionNotes": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "description", "status", "urgency", "category", "clientId", "clientName", "propertyId", "propertyNickname", "serviceAddress", "createdByEmail", "createdAt"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "A client's property",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "nickname": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "zip": { "type": "string" },
+        "propertyType": { "type": "string", "enum": ["residential", "commercial"] }
+      },
+      "required": ["clientId", "nickname", "address", "city", "state", "zip", "propertyType"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message related to a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "recipientRole": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["ticketId", "senderId", "senderRole", "recipientId", "recipientRole", "text", "timestamp", "read"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles"
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Stores service tickets"
+    },
+    "/properties/{propertyId}": {
+      "schema": { "$ref": "#/entities/Property" },
+      "description": "Stores client properties"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Stores messages"
+    }
+  }
+}
