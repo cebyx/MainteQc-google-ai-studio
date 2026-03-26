@@ -1,0 +1,7 @@
+{
+  "name": "MainteQC",
+  "description": "White-label field service management platform for service providers, technicians, and clients.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
