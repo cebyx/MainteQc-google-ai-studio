@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import { Settings, Palette, Globe, Clock, ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
+import { Settings, Palette, Globe, Clock, ShieldCheck, Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react';
 
 export const BrandSettingsView: React.FC = () => {
   const { brand, setBrand } = useApp();
+  const [showToast, setShowToast] = useState(false);
+
+  const handleSave = () => {
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="max-w-4xl space-y-8 relative">
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-bold text-white shadow-xl animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          Brand settings saved successfully
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <h3 className="text-lg font-bold text-gray-900">Company Identity</h3>
@@ -85,7 +98,12 @@ export const BrandSettingsView: React.FC = () => {
 
       <div className="flex justify-end gap-3">
         <button className="rounded-xl border border-gray-200 bg-white px-6 py-2.5 text-sm font-bold text-gray-700">Cancel</button>
-        <button className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100">Save Brand Settings</button>
+        <button 
+          onClick={handleSave}
+          className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 active:scale-95 transition-transform"
+        >
+          Save Brand Settings
+        </button>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../AppContext';
+import { cn } from '../lib/utils';
 import { 
   ClipboardCheck, 
   Clock, 
@@ -35,9 +36,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: any; col
   </div>
 );
 
-import { cn } from '../lib/utils';
-
-export const AdminDashboard: React.FC = () => {
+export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
   const { tickets, clients, technicians, invoices } = useApp();
 
   const pendingCount = tickets.filter(t => t.status === 'pending_review').length;
@@ -81,7 +80,7 @@ export const AdminDashboard: React.FC = () => {
         <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-6 py-4">
             <h3 className="font-bold text-gray-900">Recent Service Requests</h3>
-            <button className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1">
+            <button onClick={() => setActiveTab('dispatch')} className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1">
               View All <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -110,19 +109,19 @@ export const AdminDashboard: React.FC = () => {
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
-              <button className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
+              <button onClick={() => setActiveTab('dispatch')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
                 <Plus className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-bold text-gray-700">New Ticket</span>
               </button>
-              <button className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
+              <button onClick={() => setActiveTab('clients')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
                 <Users className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-bold text-gray-700">Add Client</span>
               </button>
-              <button className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
+              <button onClick={() => setActiveTab('dispatch')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
                 <HardHat className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-bold text-gray-700">Dispatch</span>
               </button>
-              <button className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
+              <button onClick={() => setActiveTab('billing')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
                 <FileText className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-bold text-gray-700">Invoicing</span>
               </button>

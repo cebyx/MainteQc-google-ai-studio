@@ -31,7 +31,7 @@ const AppContent: React.FC = () => {
   const renderContent = () => {
     if (role === 'ADMIN') {
       switch (activeTab) {
-        case 'dashboard': return <AdminDashboard />;
+        case 'dashboard': return <AdminDashboard setActiveTab={setActiveTab} />;
         case 'dispatch': return <DispatchBoard />;
         case 'schedule': return <ScheduleView />;
         case 'clients': return <ClientsListView />;
@@ -40,7 +40,7 @@ const AppContent: React.FC = () => {
         case 'messages': return <MessagesView />;
         case 'billing': return <BillingView />;
         case 'brand': return <BrandSettingsView />;
-        default: return <AdminDashboard />;
+        default: return <AdminDashboard setActiveTab={setActiveTab} />;
       }
     }
     
@@ -56,14 +56,14 @@ const AppContent: React.FC = () => {
     
     if (role === 'CLIENT') {
       switch (activeTab) {
-        case 'dashboard': return <ClientDashboard />;
+        case 'dashboard': return <ClientDashboard setActiveTab={setActiveTab} />;
         case 'request': return <RequestForm onSuccess={() => setActiveTab('dashboard')} />;
-        case 'appointments': return <AppointmentsListView />;
+        case 'appointments': return <AppointmentsListView setActiveTab={setActiveTab} />;
         case 'history': return <ServiceHistoryView />;
         case 'billing': return <BillingView />;
         case 'messages': return <MessagesView />;
         case 'profile': return <ProfileView />;
-        default: return <ClientDashboard />;
+        default: return <ClientDashboard setActiveTab={setActiveTab} />;
       }
     }
 

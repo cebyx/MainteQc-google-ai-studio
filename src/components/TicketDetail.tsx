@@ -24,6 +24,208 @@ interface TicketDetailProps {
   onClose: () => void;
 }
 
+const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; editedTicket: Partial<Ticket>; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void; onClose: () => void }> = ({ ticket, currentTicket, editedTicket, handleChange, handleSave, handleStatusChange, onClose }) => {
+  const { technicians } = useApp();
+  return (
+    <div className="space-y-8">
+      <section>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{ticket.title}</h3>
+        <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
+      </section>
+
+      <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200">
+        <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">
+          <Clipboard className="h-5 w-5" />
+          Dispatch Management
+        </h4>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Schedule Date</label>
+              <input 
+                type="date" 
+                className="w-full rounded-lg border-gray-200 text-sm" 
+                value={currentTicket.scheduledDate || ''} 
+                onChange={(e) => handleChange('scheduledDate', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Schedule Time</label>
+              <input 
+                type="time" 
+                className="w-full rounded-lg border-gray-200 text-sm" 
+                value={currentTicket.scheduledTime || ''} 
+                onChange={(e) => handleChange('scheduledTime', e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Assign Technician</label>
+            <select 
+              className="w-full rounded-lg border-gray-200 text-sm"
+              value={currentTicket.assignedTechnicianId || ''}
+              onChange={(e) => {
+                const techId = e.target.value;
+                const tech = technicians.find(t => t.id === techId);
+                handleChange('assignedTechnicianId', techId);
+                handleChange('assignedTechnicianName', tech?.fullName || '');
+              }}
+            >
+              <option value="">Unassigned</option>
+              {technicians.map(tech => (
+                <option key={tech.id} value={tech.id}>{tech.fullName}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Status</label>
+            <select 
+              className="w-full rounded-lg border-gray-200 text-sm"
+              value={currentTicket.status}
+              onChange={(e) => handleChange('status', e.target.value as JobStatus)}
+            >
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50"
+              onClick={handleSave}
+              disabled={Object.keys(editedTicket).length === 0}
+            >
+              Save Changes
+            </button>
+            <button 
+              className="flex-1 rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600"
+              onClick={() => {
+                handleStatusChange('rejected');
+                onClose();
+              }}
+            >
+              Reject Ticket
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="space-y-4">
+        <div className="rounded-xl border border-gray-100 p-4">
+          <h5 className="text-sm font-bold text-gray-900 mb-2">Technician Field Notes</h5>
+          <textarea 
+            className="w-full rounded-lg border-gray-200 text-sm" 
+            placeholder="Add field notes..."
+            value={currentTicket.technicianNotes || ''}
+            onChange={(e) => handleChange('technicianNotes', e.target.value)}
+            onBlur={handleSave}
+          />
+        </div>
+        <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-4">
+          <h5 className="text-sm font-bold text-amber-900 mb-2 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Internal Admin Notes (Private)
+          </h5>
+          <textarea 
+            className="w-full rounded-lg border-amber-200 text-sm bg-white" 
+            placeholder="Add internal notes..."
+            value={currentTicket.adminNotes || ''}
+            onChange={(e) => handleChange('adminNotes', e.target.value)}
+            onBlur={handleSave}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void }> = ({ ticket, currentTicket, handleChange, handleSave, handleStatusChange }) => {
+  return (
+    <div className="space-y-8">
+      <section>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{ticket.title}</h3>
+        <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
+      </section>
+
+      <section className="rounded-2xl bg-blue-50 p-6 border border-blue-100">
+        <h4 className="flex items-center gap-2 font-bold text-blue-900 mb-4">
+          <Wrench className="h-5 w-5" />
+          Field Status Controls
+        </h4>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {[
+            { status: 'on_the_way', label: 'On My Way' },
+            { status: 'arrived', label: 'Arrived' },
+            { status: 'in_progress', label: 'In Progress' },
+            { status: 'waiting_on_parts', label: 'Waiting on Parts' },
+            { status: 'completed', label: 'Completed' },
+            { status: 'unable_to_complete', label: 'Unable to Complete' },
+          ].map((btn) => (
+            <button
+              key={btn.status}
+              onClick={() => handleStatusChange(btn.status as JobStatus)}
+              className={cn(
+                "rounded-xl border py-3 text-xs font-bold transition-all active:scale-95",
+                ticket.status === btn.status
+                  ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200"
+                  : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+              )}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="space-y-4">
+        <div className="rounded-xl border border-gray-100 p-4">
+          <h5 className="text-sm font-bold text-gray-900 mb-2">Technician Field Notes</h5>
+          <textarea 
+            className="w-full rounded-lg border-gray-200 text-sm" 
+            placeholder="Add field notes..."
+            value={currentTicket.technicianNotes || ''}
+            onChange={(e) => handleChange('technicianNotes', e.target.value)}
+            onBlur={handleSave}
+            rows={4}
+          />
+        </div>
+        <div className="rounded-xl border border-gray-100 p-4">
+          <h5 className="text-sm font-bold text-gray-900 mb-2">Completion Notes</h5>
+          <textarea 
+            className="w-full rounded-lg border-gray-200 text-sm" 
+            placeholder="Add completion notes..."
+            value={currentTicket.completionNotes || ''}
+            onChange={(e) => handleChange('completionNotes', e.target.value)}
+            onBlur={handleSave}
+            rows={3}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
+  return (
+    <div className="space-y-8">
+      <section>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{ticket.title}</h3>
+        <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
+      </section>
+
+      {ticket.completionNotes && (
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <h5 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            Completion Notes
+          </h5>
+          <p className="text-sm text-gray-600">{ticket.completionNotes}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) => {
   const { role, updateTicket } = useApp();
   const [editedTicket, setEditedTicket] = useState<Partial<Ticket>>({});
@@ -54,7 +256,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) =
             </button>
             <div>
               <h2 className="text-lg font-bold text-gray-900">Ticket #{ticket.id.slice(-4)}</h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-1">
                 <StatusBadge status={ticket.status} />
                 <UrgencyBadge urgency={ticket.urgency} />
               </div>
@@ -70,158 +272,61 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) =
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             {/* Main Info */}
-            <div className="lg:col-span-2 space-y-8">
-              <section>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{ticket.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
-              </section>
-
-              {/* Technician View: Field Controls */}
-              {role === 'TECHNICIAN' && (
-                <section className="rounded-2xl bg-blue-50 p-6 border border-blue-100">
-                  <h4 className="flex items-center gap-2 font-bold text-blue-900 mb-4">
-                    <Wrench className="h-5 w-5" />
-                    Field Status Controls
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {[
-                      { status: 'on_the_way', label: 'On My Way' },
-                      { status: 'arrived', label: 'Arrived' },
-                      { status: 'in_progress', label: 'In Progress' },
-                      { status: 'waiting_on_parts', label: 'Waiting on Parts' },
-                      { status: 'completed', label: 'Completed' },
-                      { status: 'unable_to_complete', label: 'Unable to Complete' },
-                    ].map((btn) => (
-                      <button
-                        key={btn.status}
-                        onClick={() => handleStatusChange(btn.status as JobStatus)}
-                        className={cn(
-                          "rounded-xl border py-3 text-xs font-bold transition-all active:scale-95",
-                          ticket.status === btn.status
-                            ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200"
-                            : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-600"
-                        )}
-                      >
-                        {btn.label}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Admin View: Dispatch Controls */}
+            <div className="lg:col-span-2">
               {role === 'ADMIN' && (
-                <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200">
-                  <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">
-                    <Clipboard className="h-5 w-5" />
-                    Dispatch Management
-                  </h4>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Schedule Date</label>
-                        <input 
-                          type="date" 
-                          className="w-full rounded-lg border-gray-200 text-sm" 
-                          value={currentTicket.scheduledDate || ''} 
-                          onChange={(e) => handleChange('scheduledDate', e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Schedule Time</label>
-                        <input 
-                          type="time" 
-                          className="w-full rounded-lg border-gray-200 text-sm" 
-                          value={currentTicket.scheduledTime || ''} 
-                          onChange={(e) => handleChange('scheduledTime', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Assign Technician</label>
-                      <select 
-                        className="w-full rounded-lg border-gray-200 text-sm"
-                        value={currentTicket.assignedTechnicianId || ''}
-                        onChange={(e) => handleChange('assignedTechnicianId', e.target.value)}
-                      >
-                        <option value="">Unassigned</option>
-                        <option value="tech1">Mike Miller</option>
-                        <option value="tech2">Dave Davis</option>
-                      </select>
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50"
-                        onClick={handleSave}
-                        disabled={Object.keys(editedTicket).length === 0}
-                      >
-                        Save Changes
-                      </button>
-                      <button className="flex-1 rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600">Reject Ticket</button>
-                    </div>
-                  </div>
-                </section>
+                <AdminTicketDetail 
+                  ticket={ticket} 
+                  currentTicket={currentTicket as Ticket} 
+                  editedTicket={editedTicket} 
+                  handleChange={handleChange} 
+                  handleSave={handleSave} 
+                  handleStatusChange={handleStatusChange} 
+                  onClose={onClose}
+                />
               )}
-
-              {/* Notes Sections */}
-              <div className="space-y-4">
-                {role !== 'CLIENT' && (
-                  <div className="rounded-xl border border-gray-100 p-4">
-                    <h5 className="text-sm font-bold text-gray-900 mb-2">Technician Field Notes</h5>
-                    <textarea 
-                      className="w-full rounded-lg border-gray-200 text-sm" 
-                      placeholder="Add field notes..."
-                      value={currentTicket.technicianNotes || ''}
-                      onChange={(e) => handleChange('technicianNotes', e.target.value)}
-                      onBlur={handleSave}
-                    />
-                  </div>
-                )}
-                {role === 'ADMIN' && (
-                  <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-4">
-                    <h5 className="text-sm font-bold text-amber-900 mb-2 flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4" />
-                      Internal Admin Notes (Private)
-                    </h5>
-                    <textarea 
-                      className="w-full rounded-lg border-amber-200 text-sm bg-white" 
-                      placeholder="Add internal notes..."
-                      value={currentTicket.adminNotes || ''}
-                      onChange={(e) => handleChange('adminNotes', e.target.value)}
-                      onBlur={handleSave}
-                    />
-                  </div>
-                )}
-              </div>
+              {role === 'TECHNICIAN' && (
+                <TechnicianTicketDetail 
+                  ticket={ticket} 
+                  currentTicket={currentTicket as Ticket} 
+                  handleChange={handleChange} 
+                  handleSave={handleSave} 
+                  handleStatusChange={handleStatusChange} 
+                />
+              )}
+              {role === 'CLIENT' && (
+                <ClientTicketDetail ticket={ticket} />
+              )}
             </div>
 
             {/* Sidebar Info */}
             <div className="space-y-6">
-              {/* Customer Info */}
-              <div className="rounded-2xl border border-gray-100 p-5">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Customer</h4>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {ticket.clientName.charAt(0)}
+              {/* Customer Info (Hidden for Client) */}
+              {role !== 'CLIENT' && (
+                <div className="rounded-2xl border border-gray-100 p-5">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Customer</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        {ticket.clientName.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{ticket.clientName}</div>
+                        <div className="text-xs text-gray-500">Client ID: {ticket.clientId}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm font-bold text-gray-900">{ticket.clientName}</div>
-                      <div className="text-xs text-gray-500">Client ID: {ticket.clientId}</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                      (555) 123-4567
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      {ticket.createdByEmail}
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                        (555) 123-4567
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        {ticket.createdByEmail}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Property Info */}
               <div className="rounded-2xl border border-gray-100 p-5">

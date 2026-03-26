@@ -40,6 +40,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? MOCK_TECHNICIANS[0] 
       : MOCK_CLIENTS[0];
 
+  // Filter data based on role
+  const filteredTickets = role === 'ADMIN' 
+    ? tickets 
+    : role === 'TECHNICIAN' 
+      ? tickets.filter(t => t.assignedTechnicianId === currentUser.id)
+      : tickets.filter(t => t.clientId === currentUser.id);
+
+  const filteredProperties = role === 'ADMIN' || role === 'TECHNICIAN'
+    ? properties
+    : properties.filter(p => p.clientId === currentUser.id);
+
+  const filteredQuotes = role === 'ADMIN' || role === 'TECHNICIAN'
+    ? quotes
+    : quotes.filter(q => q.clientId === currentUser.id);
+
+  const filteredInvoices = role === 'ADMIN' || role === 'TECHNICIAN'
+    ? invoices
+    : invoices.filter(i => i.clientId === currentUser.id);
+
+  const filteredMessages = role === 'ADMIN'
+    ? messages
+    : messages.filter(m => m.senderId === currentUser.id || m.recipientId === currentUser.id);
+
   const updateTicket = (id: string, updates: Partial<Ticket>) => {
     setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
@@ -66,7 +89,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       role, setRole, currentUser, brand, setBrand,
-      clients, technicians, tickets, properties, quotes, invoices, messages,
+      clients, technicians, 
+      tickets: filteredTickets, 
+      properties: filteredProperties, 
+      quotes: filteredQuotes, 
+      invoices: filteredInvoices, 
+      messages: filteredMessages,
       updateTicket, addTicket, addMessage
     }}>
       {children}

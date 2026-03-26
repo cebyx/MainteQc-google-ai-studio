@@ -13,7 +13,7 @@ import {
 import { StatusBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
 
-export const ClientDashboard: React.FC = () => {
+export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
   const { tickets, currentUser, properties } = useApp();
 
   // Filter records for this client
@@ -29,7 +29,7 @@ export const ClientDashboard: React.FC = () => {
         <div className="relative z-10">
           <h2 className="text-2xl font-bold">Hello, {currentUser.fullName.split(' ')[0]}!</h2>
           <p className="mt-1 text-blue-100 opacity-90">How can we help you today?</p>
-          <button className="mt-6 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-blue-700 shadow-lg transition-transform active:scale-95">
+          <button onClick={() => setActiveTab('request')} className="mt-6 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-blue-700 shadow-lg transition-transform active:scale-95">
             <Plus className="h-5 w-5" />
             Request New Service
           </button>
@@ -87,13 +87,13 @@ export const ClientDashboard: React.FC = () => {
         {/* Quick Links & Info */}
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <button className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
+            <button onClick={() => setActiveTab('history')} className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
               <div className="rounded-xl bg-blue-100 p-3 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <History className="h-6 w-6" />
               </div>
               <span className="text-sm font-bold text-gray-700">History</span>
             </button>
-            <button className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
+            <button onClick={() => setActiveTab('billing')} className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
               <div className="rounded-xl bg-indigo-100 p-3 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                 <FileText className="h-6 w-6" />
               </div>

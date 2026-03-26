@@ -80,7 +80,7 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
   const navItems = role === 'ADMIN' ? adminNav : role === 'TECHNICIAN' ? techNav : clientNav;
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans text-gray-900">
+    <div className="flex h-screen overflow-hidden bg-gray-50 font-sans text-gray-900">
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 flex-col border-r border-gray-200 bg-white lg:flex">
         <div className="flex h-16 items-center border-b border-gray-100 px-6">

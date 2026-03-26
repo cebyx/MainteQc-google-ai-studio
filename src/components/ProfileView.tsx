@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import { User, Mail, Phone, MapPin, Shield, Wrench, CreditCard, Bell, Lock } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Shield, Wrench, CreditCard, Bell, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const ProfileView: React.FC = () => {
   const { currentUser, role } = useApp();
+  const [showToast, setShowToast] = useState(false);
+
+  const handleSave = () => {
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   const sections = [
     { title: 'Personal Information', icon: User },
@@ -14,7 +20,14 @@ export const ProfileView: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="max-w-4xl space-y-8 relative">
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-bold text-white shadow-xl animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          Profile updated successfully
+        </div>
+      )}
+
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between rounded-3xl bg-white p-8 border border-gray-200 shadow-sm">
         <div className="flex items-center gap-6">
           <div className="h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-3xl shadow-inner">
@@ -30,7 +43,10 @@ export const ProfileView: React.FC = () => {
             </div>
           </div>
         </div>
-        <button className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100">
+        <button 
+          onClick={handleSave}
+          className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 active:scale-95 transition-transform"
+        >
           Edit Profile
         </button>
       </div>
@@ -85,7 +101,10 @@ export const ProfileView: React.FC = () => {
             )}
           </div>
           <div className="pt-6 border-t border-gray-100 flex justify-end">
-            <button className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100">
+            <button 
+              onClick={handleSave}
+              className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 active:scale-95 transition-transform"
+            >
               Save Changes
             </button>
           </div>

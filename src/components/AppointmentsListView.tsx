@@ -6,7 +6,7 @@ import { formatDate, cn } from '../lib/utils';
 import { TicketDetail } from './TicketDetail';
 import { Ticket } from '../types';
 
-export const AppointmentsListView: React.FC = () => {
+export const AppointmentsListView: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
   const { tickets, currentUser } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -25,7 +25,7 @@ export const AppointmentsListView: React.FC = () => {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Appointments</h1>
           <p className="text-gray-500 mt-1">View your scheduled service visits</p>
         </div>
-        <button className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:bg-blue-700 hover:shadow-xl active:scale-95">
+        <button onClick={() => setActiveTab('request')} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:bg-blue-700 hover:shadow-xl active:scale-95">
           <Plus className="h-4 w-4" />
           Request Service
         </button>

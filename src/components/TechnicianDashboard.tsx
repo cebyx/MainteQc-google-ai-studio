@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { 
   Calendar, 
@@ -11,9 +11,12 @@ import {
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
+import { TicketDetail } from './TicketDetail';
+import { Ticket } from '../types';
 
 export const TechnicianDashboard: React.FC = () => {
   const { tickets, currentUser } = useApp();
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // Filter jobs assigned to this technician
   const myJobs = tickets.filter(t => t.assignedTechnicianId === currentUser.id);
@@ -84,10 +87,10 @@ export const TechnicianDashboard: React.FC = () => {
                 </div>
 
                 <div className="mt-4 flex gap-2">
-                  <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-100 active:bg-blue-700">
+                  <button onClick={() => setSelectedTicket(job)} className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-100 active:bg-blue-700">
                     Start Job
                   </button>
-                  <button className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 active:bg-gray-100">
+                  <button onClick={() => setSelectedTicket(job)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 active:bg-gray-100">
                     <ChevronRight className="h-5 w-5" />
                   </button>
                 </div>
@@ -113,7 +116,7 @@ export const TechnicianDashboard: React.FC = () => {
         </div>
         <div className="space-y-4">
           {myJobs.filter(t => t.scheduledDate !== todayStr && t.status !== 'completed').slice(0, 2).map(job => (
-            <div key={job.id} className="flex items-center justify-between border-b border-white/10 pb-4 last:border-0 last:pb-0">
+            <div key={job.id} onClick={() => setSelectedTicket(job)} className="flex items-center justify-between border-b border-white/10 pb-4 last:border-0 last:pb-0 cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors">
               <div>
                 <div className="text-sm font-bold">{job.title}</div>
                 <div className="text-xs text-gray-400">{formatDate(job.scheduledDate || '')} • {job.scheduledTime}</div>
@@ -123,6 +126,10 @@ export const TechnicianDashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {selectedTicket && (
+        <TicketDetail ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />
+      )}
     </div>
   );
 };
