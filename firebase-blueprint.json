@@ -84,9 +84,12 @@
         "logo": { "type": "string" },
         "accentColor": { "type": "string" },
         "email": { "type": "string" },
-        "phone": { "type": "string" }
+        "phone": { "type": "string" },
+        "businessHours": { "type": "string" },
+        "serviceCategories": { "type": "array", "items": { "type": "string" } },
+        "address": { "type": "string" }
       },
-      "required": ["companyName", "tagline", "logo", "accentColor", "email", "phone"]
+      "required": ["companyName", "tagline", "logo", "accentColor", "email", "phone", "businessHours", "serviceCategories", "address"]
     },
     "Quote": {
       "title": "Quote",
@@ -95,7 +98,10 @@
       "properties": {
         "ticketId": { "type": "string" },
         "clientId": { "type": "string" },
+        "propertyId": { "type": "string" },
         "status": { "type": "string", "enum": ["draft", "sent", "accepted", "declined"] },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
         "total": { "type": "number" },
         "lineItems": { 
           "type": "array", 
@@ -103,14 +109,20 @@
             "type": "object",
             "properties": {
               "description": { "type": "string" },
+              "quantity": { "type": "number" },
+              "rate": { "type": "number" },
               "total": { "type": "number" }
             },
-            "required": ["description", "total"]
+            "required": ["description", "quantity", "rate", "total"]
           } 
         },
-        "createdAt": { "type": "string" }
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "sentDate": { "type": "string" },
+        "acceptedDate": { "type": "string" },
+        "declinedDate": { "type": "string" }
       },
-      "required": ["ticketId", "clientId", "status", "total", "lineItems", "createdAt"]
+      "required": ["ticketId", "clientId", "propertyId", "status", "subtotal", "tax", "total", "lineItems", "notes", "createdAt"]
     },
     "Invoice": {
       "title": "Invoice",
@@ -119,13 +131,31 @@
       "properties": {
         "ticketId": { "type": "string" },
         "clientId": { "type": "string" },
+        "propertyId": { "type": "string" },
         "status": { "type": "string", "enum": ["draft", "unpaid", "paid", "overdue"] },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
         "total": { "type": "number" },
+        "lineItems": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "quantity": { "type": "number" },
+              "rate": { "type": "number" },
+              "total": { "type": "number" }
+            },
+            "required": ["description", "quantity", "rate", "total"]
+          } 
+        },
+        "notes": { "type": "string" },
         "dueDate": { "type": "string" },
-        "paymentMethod": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "createdAt": { "type": "string" },
+        "paidDate": { "type": "string" },
+        "paymentMethod": { "type": "string" }
       },
-      "required": ["ticketId", "clientId", "status", "total", "dueDate", "createdAt"]
+      "required": ["ticketId", "clientId", "propertyId", "status", "subtotal", "tax", "total", "lineItems", "notes", "dueDate", "createdAt"]
     }
   },
   "firestore": {

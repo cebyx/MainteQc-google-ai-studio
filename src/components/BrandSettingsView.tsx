@@ -83,12 +83,23 @@ export const BrandSettingsView: React.FC = () => {
         </div>
         <div className="lg:col-span-2 space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-6">
-            <div className="h-24 w-24 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50">
-              <img src={brand.logo} alt="Logo" className="h-full w-full object-cover" />
+            <div className="h-24 w-24 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+              {brand.logo ? (
+                <img src={brand.logo} alt="Logo" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs text-gray-400">No Logo</span>
+              )}
             </div>
-            <button className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
-              Change Logo
-            </button>
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Logo URL</label>
+              <input 
+                type="text" 
+                className="w-full rounded-xl border-gray-200 text-sm" 
+                placeholder="https://example.com/logo.png"
+                value={brand.logo}
+                onChange={(e) => setBrand({ ...brand, logo: e.target.value })}
+              />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase mb-3">Accent Color</label>
@@ -106,7 +117,6 @@ export const BrandSettingsView: React.FC = () => {
       </div>
 
       <div className="flex justify-end gap-3">
-        <button className="rounded-xl border border-gray-200 bg-white px-6 py-2.5 text-sm font-bold text-gray-700">Cancel</button>
         <button 
           onClick={handleSave}
           disabled={isSaving}

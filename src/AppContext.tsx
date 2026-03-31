@@ -45,7 +45,6 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 interface AppContextType {
   role: UserRole;
-  setRole: (role: UserRole) => void;
   currentUser: any;
   brand: BrandSettings;
   setBrand: (brand: BrandSettings) => void;
@@ -338,20 +337,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Allow manual role switching for demo purposes (updates Firestore)
-  const handleSetRole = async (newRole: UserRole) => {
-    if (!currentUser) return;
-    try {
-      await updateDoc(doc(db, 'users', currentUser.id), { role: newRole });
-      setRole(newRole);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.id}`);
-    }
-  };
-
   return (
     <AppContext.Provider value={{
-      role, setRole: handleSetRole, currentUser, brand, setBrand,
+      role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, login, logout, isAuthReady
     }}>

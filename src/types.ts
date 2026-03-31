@@ -104,6 +104,7 @@ export interface Quote {
   tax: number;
   total: number;
   notes: string;
+  createdAt: string;
   sentDate?: string;
   acceptedDate?: string;
   declinedDate?: string;
@@ -120,6 +121,7 @@ export interface Invoice {
   tax: number;
   total: number;
   dueDate: string;
+  createdAt: string;
   paidDate?: string;
   paymentMethod?: string;
   notes: string;

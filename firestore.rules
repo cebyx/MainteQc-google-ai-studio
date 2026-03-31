@@ -221,7 +221,8 @@ service cloud.firestore {
       );
       allow update: if isAuthenticated() && isValidTicket() && (
         isAdmin() || 
-        (resource.data.assignedTechnicianId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'technicianNotes', 'completionNotes']))
+        (resource.data.assignedTechnicianId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'technicianNotes', 'completionNotes'])) ||
+        (isOwner(resource.data.clientId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quoteStatus', 'invoiceStatus']))
       );
       allow delete: if isAdmin();
     }

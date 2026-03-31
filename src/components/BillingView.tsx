@@ -5,16 +5,16 @@ import { FileText, Send, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const BillingView: React.FC = () => {
-  const { role, quotes, invoices, clients, tickets, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus } = useApp();
+  const { role, quotes, invoices, clients, tickets, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, updateTicket } = useApp();
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string>('');
 
   const handleCreateQuote = async () => {
-    if (clients.length === 0 || tickets.length === 0) {
-      alert("Need at least one client and ticket to create a quote");
-      return;
-    }
-    const client = clients[0];
-    const ticket = tickets.find(t => t.clientId === client.id) || tickets[0];
+    if (!selectedTicketId) return;
+    const ticket = tickets.find(t => t.id === selectedTicketId);
+    if (!ticket) return;
     
     setIsProcessing('create-quote');
     try {
@@ -32,18 +32,17 @@ export const BillingView: React.FC = () => {
           { description: 'Labor (2 hrs)', quantity: 2, rate: 50.00, total: 100.00 }
         ]
       });
+      setShowQuoteModal(false);
+      setSelectedTicketId('');
     } finally {
       setIsProcessing(null);
     }
   };
 
   const handleNewInvoice = async () => {
-    if (clients.length === 0 || tickets.length === 0) {
-      alert("Need at least one client and ticket to create an invoice");
-      return;
-    }
-    const client = clients[0];
-    const ticket = tickets.find(t => t.clientId === client.id) || tickets[0];
+    if (!selectedTicketId) return;
+    const ticket = tickets.find(t => t.id === selectedTicketId);
+    if (!ticket) return;
     
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 14);
@@ -66,6 +65,8 @@ export const BillingView: React.FC = () => {
           { description: 'Labor (4 hrs)', quantity: 4, rate: 50.00, total: 200.00 }
         ]
       });
+      setShowInvoiceModal(false);
+      setSelectedTicketId('');
     } finally {
       setIsProcessing(null);
     }
@@ -75,6 +76,10 @@ export const BillingView: React.FC = () => {
     setIsProcessing(`quote-${id}`);
     try {
       await updateQuoteStatus(id, status);
+      const quote = quotes.find(q => q.id === id);
+      if (quote && status === 'accepted') {
+        updateTicket(quote.ticketId, { quoteStatus: 'accepted' });
+      }
     } finally {
       setIsProcessing(null);
     }
@@ -84,6 +89,10 @@ export const BillingView: React.FC = () => {
     setIsProcessing(`invoice-${id}`);
     try {
       await updateInvoiceStatus(id, status, method);
+      const invoice = invoices.find(i => i.id === id);
+      if (invoice && status === 'paid') {
+        updateTicket(invoice.ticketId, { invoiceStatus: 'paid' });
+      }
     } finally {
       setIsProcessing(null);
     }
@@ -95,11 +104,10 @@ export const BillingView: React.FC = () => {
         <h3 className="text-lg font-bold text-gray-900">Quotes & Estimates</h3>
         {role === 'ADMIN' && (
           <button 
-            onClick={handleCreateQuote}
-            disabled={isProcessing === 'create-quote'}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+            onClick={() => setShowQuoteModal(true)}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
           >
-            {isProcessing === 'create-quote' ? 'Creating...' : 'Create Quote'}
+            Create Quote
           </button>
         )}
       </div>
@@ -162,11 +170,10 @@ export const BillingView: React.FC = () => {
         <h3 className="text-lg font-bold text-gray-900">Invoices</h3>
         {role === 'ADMIN' && (
           <button 
-            onClick={handleNewInvoice}
-            disabled={isProcessing === 'create-invoice'}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+            onClick={() => setShowInvoiceModal(true)}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
           >
-            {isProcessing === 'create-invoice' ? 'Creating...' : 'New Invoice'}
+            New Invoice
           </button>
         )}
       </div>
@@ -225,6 +232,84 @@ export const BillingView: React.FC = () => {
     <div className="space-y-12">
       {renderQuotes()}
       {renderInvoices()}
+
+      {/* Quote Modal */}
+      {showQuoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-bold text-gray-900">Create Quote</h3>
+            <div className="mb-6">
+              <label className="mb-2 block text-sm font-bold text-gray-700">Select Ticket</label>
+              <select
+                className="w-full rounded-xl border-gray-200 text-sm"
+                value={selectedTicketId}
+                onChange={(e) => setSelectedTicketId(e.target.value)}
+              >
+                <option value="">-- Choose a ticket --</option>
+                {tickets
+                  .filter(t => t.quoteStatus !== 'accepted' && t.quoteStatus !== 'sent')
+                  .map(t => (
+                  <option key={t.id} value={t.id}>{t.title} ({clients.find(c => c.id === t.clientId)?.fullName || 'Unknown Client'})</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowQuoteModal(false); setSelectedTicketId(''); }}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateQuote}
+                disabled={!selectedTicketId || isProcessing === 'create-quote'}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {isProcessing === 'create-quote' ? 'Creating...' : 'Create Quote'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Modal */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-bold text-gray-900">Create Invoice</h3>
+            <div className="mb-6">
+              <label className="mb-2 block text-sm font-bold text-gray-700">Select Ticket</label>
+              <select
+                className="w-full rounded-xl border-gray-200 text-sm"
+                value={selectedTicketId}
+                onChange={(e) => setSelectedTicketId(e.target.value)}
+              >
+                <option value="">-- Choose a ticket --</option>
+                {tickets
+                  .filter(t => t.invoiceStatus !== 'paid' && t.invoiceStatus !== 'sent' && t.invoiceStatus !== 'unpaid')
+                  .map(t => (
+                  <option key={t.id} value={t.id}>{t.title} ({clients.find(c => c.id === t.clientId)?.fullName || 'Unknown Client'})</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowInvoiceModal(false); setSelectedTicketId(''); }}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleNewInvoice}
+                disabled={!selectedTicketId || isProcessing === 'create-invoice'}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {isProcessing === 'create-invoice' ? 'Creating...' : 'Create Invoice'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
