@@ -63,6 +63,7 @@ interface AppContextType {
   updateQuoteStatus: (id: string, status: Quote['status']) => Promise<void>;
   createInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => Promise<void>;
   updateInvoiceStatus: (id: string, status: Invoice['status'], paymentMethod?: string) => Promise<void>;
+  updateCurrentUserProfile: (updates: any) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -300,8 +301,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newQuote = {
         ...quote,
         createdAt: new Date().toISOString(),
+        sentDate: quote.status === 'sent' ? new Date().toISOString() : undefined,
       };
       await addDoc(collection(db, 'quotes'), newQuote);
+      if (quote.status === 'sent') {
+        updateTicket(quote.ticketId, { quoteStatus: 'sent' });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'quotes');
     }
@@ -309,7 +314,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateQuoteStatus = async (id: string, status: Quote['status']) => {
     try {
-      await updateDoc(doc(db, 'quotes', id), { status });
+      const updates: any = { status };
+      const quote = quotes.find(q => q.id === id);
+      if (status === 'accepted') {
+        updates.acceptedDate = new Date().toISOString();
+      } else if (status === 'declined') {
+        updates.declinedDate = new Date().toISOString();
+      }
+      await updateDoc(doc(db, 'quotes', id), updates);
+      if (quote) {
+        updateTicket(quote.ticketId, { quoteStatus: status });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `quotes/${id}`);
     }
@@ -322,6 +337,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString(),
       };
       await addDoc(collection(db, 'invoices'), newInvoice);
+      if (invoice.status === 'unpaid') {
+        updateTicket(invoice.ticketId, { invoiceStatus: 'unpaid' });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'invoices');
     }
@@ -330,10 +348,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateInvoiceStatus = async (id: string, status: Invoice['status'], paymentMethod?: string) => {
     try {
       const updates: any = { status };
+      const invoice = invoices.find(i => i.id === id);
       if (paymentMethod) updates.paymentMethod = paymentMethod;
+      if (status === 'paid') {
+        updates.paidDate = new Date().toISOString();
+      }
       await updateDoc(doc(db, 'invoices', id), updates);
+      if (invoice) {
+        updateTicket(invoice.ticketId, { invoiceStatus: status });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `invoices/${id}`);
+    }
+  };
+
+  const updateCurrentUserProfile = async (updates: any) => {
+    if (!currentUser) return;
+    try {
+      // Ensure role and uid cannot be changed
+      const safeUpdates = { ...updates };
+      delete safeUpdates.role;
+      delete safeUpdates.uid;
+      delete safeUpdates.id;
+      
+      await updateDoc(doc(db, 'users', currentUser.id), safeUpdates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.id}`);
     }
   };
 
@@ -341,7 +381,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages,
-      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, login, logout, isAuthReady
+      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, updateCurrentUserProfile, login, logout, isAuthReady
     }}>
       {children}
     </AppContext.Provider>

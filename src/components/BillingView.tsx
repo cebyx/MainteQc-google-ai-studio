@@ -72,14 +72,25 @@ export const BillingView: React.FC = () => {
     }
   };
 
+  const getEligibleQuoteTickets = () => {
+    return tickets.filter(t => {
+      const hasActiveQuote = quotes.some(q => q.ticketId === t.id && ['draft', 'sent', 'accepted'].includes(q.status));
+      return !hasActiveQuote;
+    });
+  };
+
+  const getEligibleInvoiceTickets = () => {
+    return tickets.filter(t => {
+      const hasActiveInvoice = invoices.some(i => i.ticketId === t.id && ['draft', 'sent', 'unpaid'].includes(i.status));
+      // Focus on completed jobs or jobs that don't have an active invoice
+      return !hasActiveInvoice && t.status === 'completed';
+    });
+  };
+
   const handleQuoteAction = async (id: string, status: 'accepted' | 'declined') => {
     setIsProcessing(`quote-${id}`);
     try {
       await updateQuoteStatus(id, status);
-      const quote = quotes.find(q => q.id === id);
-      if (quote && status === 'accepted') {
-        updateTicket(quote.ticketId, { quoteStatus: 'accepted' });
-      }
     } finally {
       setIsProcessing(null);
     }
@@ -89,10 +100,6 @@ export const BillingView: React.FC = () => {
     setIsProcessing(`invoice-${id}`);
     try {
       await updateInvoiceStatus(id, status, method);
-      const invoice = invoices.find(i => i.id === id);
-      if (invoice && status === 'paid') {
-        updateTicket(invoice.ticketId, { invoiceStatus: 'paid' });
-      }
     } finally {
       setIsProcessing(null);
     }
@@ -246,8 +253,7 @@ export const BillingView: React.FC = () => {
                 onChange={(e) => setSelectedTicketId(e.target.value)}
               >
                 <option value="">-- Choose a ticket --</option>
-                {tickets
-                  .filter(t => t.quoteStatus !== 'accepted' && t.quoteStatus !== 'sent')
+                {getEligibleQuoteTickets()
                   .map(t => (
                   <option key={t.id} value={t.id}>{t.title} ({clients.find(c => c.id === t.clientId)?.fullName || 'Unknown Client'})</option>
                 ))}
@@ -285,8 +291,7 @@ export const BillingView: React.FC = () => {
                 onChange={(e) => setSelectedTicketId(e.target.value)}
               >
                 <option value="">-- Choose a ticket --</option>
-                {tickets
-                  .filter(t => t.invoiceStatus !== 'paid' && t.invoiceStatus !== 'sent' && t.invoiceStatus !== 'unpaid')
+                {getEligibleInvoiceTickets()
                   .map(t => (
                   <option key={t.id} value={t.id}>{t.title} ({clients.find(c => c.id === t.clientId)?.fullName || 'Unknown Client'})</option>
                 ))}

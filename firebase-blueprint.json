@@ -12,7 +12,11 @@
         "phone": { "type": "string" },
         "specialties": { "type": "array", "items": { "type": "string" } },
         "company": { "type": "string" },
-        "status": { "type": "string", "enum": ["available", "busy", "offline"] }
+        "status": { "type": "string", "enum": ["available", "busy", "offline", "active", "inactive"] },
+        "companyName": { "type": "string" },
+        "billingAddress": { "type": "string" },
+        "notes": { "type": "string" },
+        "preferredContactMethod": { "type": "string", "enum": ["email", "phone", "text"] }
       },
       "required": ["uid", "role", "fullName", "email"]
     },
