@@ -21,7 +21,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Shield, Wrench, User, LogIn, LogOut } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { role, setRole, currentUser, login, logout, isAuthReady } = useApp();
+  const { role, currentUser, login, logout, isAuthReady } = useApp();
   const [activeTab, setActiveTab] = useState(role === 'TECHNICIAN' ? 'today' : 'dashboard');
 
   // Reset tab when role changes to ensure valid tab for role
@@ -105,26 +105,11 @@ const AppContent: React.FC = () => {
       <div className="mb-6 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Demo Role:</span>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setRole('ADMIN')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${role === 'ADMIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Shield className="h-4 w-4" /> Admin
-              </button>
-              <button
-                onClick={() => setRole('TECHNICIAN')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${role === 'TECHNICIAN' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Wrench className="h-4 w-4" /> Tech
-              </button>
-              <button
-                onClick={() => setRole('CLIENT')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${role === 'CLIENT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <User className="h-4 w-4" /> Client
-              </button>
+            <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Role:</span>
+            <div className="flex items-center bg-blue-50 text-blue-700 rounded-lg px-3 py-1.5 text-sm font-bold">
+              {role === 'ADMIN' && <><Shield className="h-4 w-4 mr-2" /> Admin</>}
+              {role === 'TECHNICIAN' && <><Wrench className="h-4 w-4 mr-2" /> Technician</>}
+              {role === 'CLIENT' && <><User className="h-4 w-4 mr-2" /> Client</>}
             </div>
           </div>
         </div>

@@ -3,12 +3,21 @@ import { useApp } from '../AppContext';
 import { Settings, Palette, Globe, Clock, ShieldCheck, Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react';
 
 export const BrandSettingsView: React.FC = () => {
-  const { brand, setBrand } = useApp();
+  const { brand, setBrand, saveBrandSettings } = useApp();
   const [showToast, setShowToast] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await saveBrandSettings(brand);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (error) {
+      console.error("Failed to save brand settings", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -100,9 +109,10 @@ export const BrandSettingsView: React.FC = () => {
         <button className="rounded-xl border border-gray-200 bg-white px-6 py-2.5 text-sm font-bold text-gray-700">Cancel</button>
         <button 
           onClick={handleSave}
-          className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 active:scale-95 transition-transform"
+          disabled={isSaving}
+          className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 active:scale-95 transition-transform disabled:opacity-50"
         >
-          Save Brand Settings
+          {isSaving ? 'Saving...' : 'Save Brand Settings'}
         </button>
       </div>
     </div>

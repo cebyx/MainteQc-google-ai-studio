@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message } from './types';
-import { MOCK_BRAND, MOCK_QUOTES, MOCK_INVOICES } from './mockData';
 import { auth, db, googleProvider } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
@@ -60,6 +59,11 @@ interface AppContextType {
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
   addMessage: (message: Omit<Message, 'id' | 'timestamp' | 'read'>) => void;
+  saveBrandSettings: (brand: BrandSettings) => Promise<void>;
+  createQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => Promise<void>;
+  updateQuoteStatus: (id: string, status: Quote['status']) => Promise<void>;
+  createInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => Promise<void>;
+  updateInvoiceStatus: (id: string, status: Invoice['status'], paymentMethod?: string) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -73,13 +77,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [role, setRole] = useState<UserRole>('CLIENT');
   
-  const [brand, setBrand] = useState<BrandSettings>(MOCK_BRAND);
+  const [brand, setBrand] = useState<BrandSettings>({ companyName: '', tagline: '', logo: '', accentColor: '', email: '', phone: '', businessHours: '', serviceCategories: [], address: '' });
   const [clients, setClients] = useState<Client[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [quotes] = useState<Quote[]>(MOCK_QUOTES);
-  const [invoices] = useState<Invoice[]>(MOCK_INVOICES);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
   // Test connection on boot
@@ -147,12 +151,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!isAuthReady || !currentUser) return;
 
-    // Listen to Users (Clients & Technicians)
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      setClients(allUsers.filter(u => u.role === 'CLIENT'));
-      setTechnicians(allUsers.filter(u => u.role === 'TECHNICIAN'));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
+    // Listen to Users (Clients & Technicians) - ADMIN only
+    let unsubUsers = () => {};
+    if (role === 'ADMIN') {
+      unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setClients(allUsers.filter(u => u.role === 'CLIENT'));
+        setTechnicians(allUsers.filter(u => u.role === 'TECHNICIAN'));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
+    }
+
+    // Listen to Brand Settings
+    const unsubBrand = onSnapshot(doc(db, 'brandSettings', 'main'), (docSnap) => {
+      if (docSnap.exists()) {
+        setBrand(docSnap.data() as BrandSettings);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'brandSettings/main'));
+
+    // Listen to Quotes
+    const unsubQuotes = onSnapshot(collection(db, 'quotes'), (snapshot) => {
+      const allQuotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Quote));
+      if (role === 'ADMIN') {
+        setQuotes(allQuotes);
+      } else if (role === 'CLIENT') {
+        setQuotes(allQuotes.filter(q => q.clientId === currentUser.id));
+      } else {
+        setQuotes([]);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'quotes'));
+
+    // Listen to Invoices
+    const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
+      const allInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+      if (role === 'ADMIN') {
+        setInvoices(allInvoices);
+      } else if (role === 'CLIENT') {
+        setInvoices(allInvoices.filter(i => i.clientId === currentUser.id));
+      } else {
+        setInvoices([]);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'invoices'));
 
     // Listen to Tickets
     const unsubTickets = onSnapshot(collection(db, 'tickets'), (snapshot) => {
@@ -192,6 +230,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => {
       unsubUsers();
+      unsubBrand();
+      unsubQuotes();
+      unsubInvoices();
       unsubTickets();
       unsubProperties();
       unsubMessages();
@@ -247,6 +288,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const saveBrandSettings = async (newBrand: BrandSettings) => {
+    try {
+      await setDoc(doc(db, 'brandSettings', 'main'), newBrand);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'brandSettings/main');
+    }
+  };
+
+  const createQuote = async (quote: Omit<Quote, 'id' | 'createdAt'>) => {
+    try {
+      const newQuote = {
+        ...quote,
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'quotes'), newQuote);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'quotes');
+    }
+  };
+
+  const updateQuoteStatus = async (id: string, status: Quote['status']) => {
+    try {
+      await updateDoc(doc(db, 'quotes', id), { status });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `quotes/${id}`);
+    }
+  };
+
+  const createInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    try {
+      const newInvoice = {
+        ...invoice,
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'invoices'), newInvoice);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'invoices');
+    }
+  };
+
+  const updateInvoiceStatus = async (id: string, status: Invoice['status'], paymentMethod?: string) => {
+    try {
+      const updates: any = { status };
+      if (paymentMethod) updates.paymentMethod = paymentMethod;
+      await updateDoc(doc(db, 'invoices', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `invoices/${id}`);
+    }
+  };
+
   // Allow manual role switching for demo purposes (updates Firestore)
   const handleSetRole = async (newRole: UserRole) => {
     if (!currentUser) return;
@@ -262,7 +353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       role, setRole: handleSetRole, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages,
-      updateTicket, addTicket, addMessage, login, logout, isAuthReady
+      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, login, logout, isAuthReady
     }}>
       {children}
     </AppContext.Provider>

@@ -73,6 +73,59 @@
         "read": { "type": "boolean" }
       },
       "required": ["ticketId", "senderId", "senderRole", "recipientId", "recipientRole", "text", "timestamp", "read"]
+    },
+    "BrandSettings": {
+      "title": "Brand Settings",
+      "description": "White-label branding settings",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "logo": { "type": "string" },
+        "accentColor": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["companyName", "tagline", "logo", "accentColor", "email", "phone"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "A quote or estimate for a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "sent", "accepted", "declined"] },
+        "total": { "type": "number" },
+        "lineItems": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "total": { "type": "number" }
+            },
+            "required": ["description", "total"]
+          } 
+        },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ticketId", "clientId", "status", "total", "lineItems", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "An invoice for a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "unpaid", "paid", "overdue"] },
+        "total": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ticketId", "clientId", "status", "total", "dueDate", "createdAt"]
     }
   },
   "firestore": {
@@ -91,6 +144,18 @@
     "/messages/{messageId}": {
       "schema": { "$ref": "#/entities/Message" },
       "description": "Stores messages"
+    },
+    "/brandSettings/main": {
+      "schema": { "$ref": "#/entities/BrandSettings" },
+      "description": "Stores brand settings"
+    },
+    "/quotes/{quoteId}": {
+      "schema": { "$ref": "#/entities/Quote" },
+      "description": "Stores quotes"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Stores invoices"
     }
   }
 }

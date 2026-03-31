@@ -48,7 +48,15 @@ service cloud.firestore {
              data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
              data.role in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
              data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
-             data.email is string && isValidEmail(data.email);
+             data.email is string && (data.email == '' || isValidEmail(data.email)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 50)) &&
+             (!('specialties' in data) || (data.specialties is list && data.specialties.size() <= 20)) &&
+             (!('company' in data) || (data.company is string && data.company.size() < 100)) &&
+             (!('status' in data) || (data.status is string && data.status.size() < 50)) &&
+             (!('companyName' in data) || (data.companyName is string && data.companyName.size() < 100)) &&
+             (!('billingAddress' in data) || (data.billingAddress is string && data.billingAddress.size() < 200)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 1000)) &&
+             (!('preferredContactMethod' in data) || (data.preferredContactMethod in ['email', 'phone', 'text']));
     }
 
     function isValidTicket() {
@@ -65,7 +73,19 @@ service cloud.firestore {
              data.propertyNickname is string && data.propertyNickname.size() < 100 &&
              data.serviceAddress is string && data.serviceAddress.size() < 500 &&
              data.createdByEmail is string && data.createdByEmail.size() < 100 &&
-             data.createdAt is string && data.createdAt.size() < 50;
+             data.createdAt is string && data.createdAt.size() < 50 &&
+             (!('preferredDate' in data) || (data.preferredDate is string && data.preferredDate.size() < 50)) &&
+             (!('preferredTime' in data) || (data.preferredTime is string && data.preferredTime.size() < 50)) &&
+             (!('contactPreference' in data) || (data.contactPreference is string && data.contactPreference.size() < 50)) &&
+             (!('quoteStatus' in data) || (data.quoteStatus in ['none', 'draft', 'sent', 'accepted', 'declined'])) &&
+             (!('invoiceStatus' in data) || (data.invoiceStatus in ['none', 'draft', 'sent', 'unpaid', 'paid', 'overdue'])) &&
+             (!('assignedTechnicianId' in data) || (data.assignedTechnicianId is string && data.assignedTechnicianId.size() < 100)) &&
+             (!('assignedTechnicianName' in data) || (data.assignedTechnicianName is string && data.assignedTechnicianName.size() < 100)) &&
+             (!('scheduledDate' in data) || (data.scheduledDate is string && data.scheduledDate.size() < 50)) &&
+             (!('scheduledTime' in data) || (data.scheduledTime is string && data.scheduledTime.size() < 50)) &&
+             (!('technicianNotes' in data) || (data.technicianNotes is string && data.technicianNotes.size() < 5000)) &&
+             (!('completionNotes' in data) || (data.completionNotes is string && data.completionNotes.size() < 5000)) &&
+             (!('adminNotes' in data) || (data.adminNotes is string && data.adminNotes.size() < 5000));
     }
 
     function isValidProperty() {
@@ -77,7 +97,13 @@ service cloud.firestore {
              data.city is string && data.city.size() > 0 && data.city.size() < 100 &&
              data.state is string && data.state.size() > 0 && data.state.size() < 100 &&
              data.zip is string && data.zip.size() > 0 && data.zip.size() < 20 &&
-             data.propertyType in ['residential', 'commercial'];
+             data.propertyType in ['residential', 'commercial'] &&
+             (!('clientName' in data) || (data.clientName is string && data.clientName.size() < 100)) &&
+             (!('accessInstructions' in data) || (data.accessInstructions is string && data.accessInstructions.size() < 1000)) &&
+             (!('propertyNotes' in data) || (data.propertyNotes is string && data.propertyNotes.size() < 1000)) &&
+             (!('petsOrOnsiteNotes' in data) || (data.petsOrOnsiteNotes is string && data.petsOrOnsiteNotes.size() < 1000)) &&
+             (!('parkingNotes' in data) || (data.parkingNotes is string && data.parkingNotes.size() < 1000)) &&
+             (!('gateOrEntryNotes' in data) || (data.gateOrEntryNotes is string && data.gateOrEntryNotes.size() < 1000));
     }
 
     function isValidMessage() {
@@ -93,17 +119,93 @@ service cloud.firestore {
              data.read is bool;
     }
 
+    function isValidBrandSettings() {
+      let data = request.resource.data;
+      return hasRequiredFields(['companyName', 'tagline', 'logo', 'accentColor', 'email', 'phone', 'businessHours', 'serviceCategories', 'address']) &&
+             data.companyName is string && data.companyName.size() > 0 && data.companyName.size() < 100 &&
+             data.tagline is string && data.tagline.size() < 200 &&
+             data.logo is string && data.logo.size() < 2000 &&
+             data.accentColor is string && data.accentColor.size() < 20 &&
+             data.email is string && (data.email == '' || isValidEmail(data.email)) &&
+             data.phone is string && data.phone.size() < 50 &&
+             data.businessHours is string && data.businessHours.size() < 200 &&
+             data.serviceCategories is list && data.serviceCategories.size() <= 50 &&
+             data.address is string && data.address.size() < 200;
+    }
+
+    function isValidQuote() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'clientId', 'propertyId', 'status', 'total', 'subtotal', 'tax', 'lineItems', 'notes', 'createdAt']) &&
+             data.ticketId is string && data.ticketId.size() > 0 && data.ticketId.size() < 100 &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.propertyId is string && data.propertyId.size() > 0 && data.propertyId.size() < 100 &&
+             data.status in ['draft', 'sent', 'accepted', 'declined'] &&
+             data.total is number && data.total >= 0 &&
+             data.subtotal is number && data.subtotal >= 0 &&
+             data.tax is number && data.tax >= 0 &&
+             data.lineItems is list && data.lineItems.size() <= 50 &&
+             data.notes is string && data.notes.size() < 5000 &&
+             data.createdAt is string && data.createdAt.size() < 50 &&
+             (!('sentDate' in data) || (data.sentDate is string && data.sentDate.size() < 50)) &&
+             (!('acceptedDate' in data) || (data.acceptedDate is string && data.acceptedDate.size() < 50)) &&
+             (!('declinedDate' in data) || (data.declinedDate is string && data.declinedDate.size() < 50));
+    }
+
+    function isValidInvoice() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'clientId', 'propertyId', 'status', 'total', 'subtotal', 'tax', 'lineItems', 'notes', 'dueDate', 'createdAt']) &&
+             data.ticketId is string && data.ticketId.size() > 0 && data.ticketId.size() < 100 &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.propertyId is string && data.propertyId.size() > 0 && data.propertyId.size() < 100 &&
+             data.status in ['draft', 'unpaid', 'paid', 'overdue'] &&
+             data.total is number && data.total >= 0 &&
+             data.subtotal is number && data.subtotal >= 0 &&
+             data.tax is number && data.tax >= 0 &&
+             data.lineItems is list && data.lineItems.size() <= 50 &&
+             data.notes is string && data.notes.size() < 5000 &&
+             data.dueDate is string && data.dueDate.size() < 50 &&
+             data.createdAt is string && data.createdAt.size() < 50 &&
+             (!('paidDate' in data) || (data.paidDate is string && data.paidDate.size() < 50)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() < 100));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(userId));
       allow create: if isAuthenticated() && isValidUser() && (
         isAdmin() || (isOwner(userId) && request.resource.data.role == 'CLIENT')
       );
       allow update: if isAuthenticated() && isValidUser() && (
-        isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role)
+        isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.uid == resource.data.uid)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /brandSettings/{document=**} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidBrandSettings();
+      allow delete: if isAdmin();
+    }
+
+    match /quotes/{quoteId} {
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
+      allow create: if isAdmin() && isValidQuote();
+      allow update: if isAuthenticated() && isValidQuote() && (
+        isAdmin() || 
+        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) && request.resource.data.status in ['accepted', 'declined'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
+      allow create: if isAdmin() && isValidInvoice();
+      allow update: if isAuthenticated() && isValidInvoice() && (
+        isAdmin() || 
+        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paymentMethod']) && request.resource.data.status == 'paid')
       );
       allow delete: if isAdmin();
     }
@@ -119,8 +221,7 @@ service cloud.firestore {
       );
       allow update: if isAuthenticated() && isValidTicket() && (
         isAdmin() || 
-        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId) || 
-        (resource.data.assignedTechnicianId == request.auth.uid && request.resource.data.clientId == resource.data.clientId)
+        (resource.data.assignedTechnicianId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'technicianNotes', 'completionNotes']))
       );
       allow delete: if isAdmin();
     }
@@ -152,7 +253,7 @@ service cloud.firestore {
       );
       allow update: if isAuthenticated() && isValidMessage() && (
         isAdmin() || 
-        isOwner(resource.data.recipientId) // Recipient can mark as read
+        (isOwner(resource.data.recipientId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']))
       );
       allow delete: if isAdmin();
     }
