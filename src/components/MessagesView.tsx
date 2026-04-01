@@ -9,6 +9,7 @@ export const MessagesView: React.FC = () => {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'system' | 'direct'>('all');
 
   // Group messages by ticketId
   const conversations = tickets.filter(t => 
@@ -20,18 +21,24 @@ export const MessagesView: React.FC = () => {
     const ticketMsgs = messages.filter(m => m.ticketId === ticket.id).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     const lastMessage = ticketMsgs[ticketMsgs.length - 1];
     const unreadCount = ticketMsgs.filter(m => !m.read && m.recipientId === currentUser.id).length;
+    const hasSystemMessages = ticketMsgs.some(m => m.isSystem);
     
     return {
       ticket,
       messages: ticketMsgs,
       lastMessage,
-      unreadCount
+      unreadCount,
+      hasSystemMessages
     };
-  }).filter(c => 
-    c.ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.ticket.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.lastMessage && c.lastMessage.text.toLowerCase().includes(searchQuery.toLowerCase()))
-  ).sort((a, b) => {
+  }).filter(c => {
+    const matchesSearch = c.ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      c.ticket.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.lastMessage && c.lastMessage.text.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    if (filter === 'system') return matchesSearch && c.hasSystemMessages;
+    if (filter === 'direct') return matchesSearch && c.messages.some(m => !m.isSystem);
+    return matchesSearch;
+  }).sort((a, b) => {
     const timeA = a.lastMessage ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.ticket.createdAt).getTime();
     const timeB = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.ticket.createdAt).getTime();
     return timeB - timeA;
@@ -80,13 +87,29 @@ export const MessagesView: React.FC = () => {
         "flex flex-col border-r border-gray-100 bg-gray-50/30 w-full md:w-80 lg:w-96 shrink-0 transition-all",
         selectedTicketId ? "hidden md:flex" : "flex"
       )}>
-        <div className="p-4 border-b border-gray-100 bg-white">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Messages</h2>
+        <div className="p-4 border-b border-gray-100 bg-white space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">Messages</h2>
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              <button 
+                onClick={() => setFilter('all')}
+                className={cn("px-2 py-1 text-[10px] font-bold rounded-md transition-all", filter === 'all' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500")}
+              >
+                All
+              </button>
+              <button 
+                onClick={() => setFilter('system')}
+                className={cn("px-2 py-1 text-[10px] font-bold rounded-md transition-all", filter === 'system' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500")}
+              >
+                System
+              </button>
+            </div>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
               type="text" 
-              placeholder="Search messages..." 
+              placeholder="Search conversations..." 
               className="w-full rounded-xl border-gray-200 bg-gray-50 pl-10 pr-4 py-2 text-sm focus:ring-blue-500"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -111,8 +134,11 @@ export const MessagesView: React.FC = () => {
                   )}
                 >
                   <div className="relative shrink-0 mt-1">
-                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {role === 'CLIENT' ? 'A' : ticket.clientName.charAt(0)}
+                    <div className={cn(
+                      "h-10 w-10 rounded-full flex items-center justify-center font-bold",
+                      lastMessage?.isSystem ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600"
+                    )}>
+                      {lastMessage?.isSystem ? <Shield className="h-5 w-5" /> : (role === 'CLIENT' ? 'A' : ticket.clientName.charAt(0))}
                     </div>
                     {unreadCount > 0 && (
                       <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 border-2 border-white flex items-center justify-center text-[8px] font-bold text-white">
@@ -123,11 +149,11 @@ export const MessagesView: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h4 className="text-sm font-bold text-gray-900 truncate">
-                        {role === 'CLIENT' ? 'Support Center' : ticket.clientName}
+                        {lastMessage?.isSystem ? 'System Notification' : (role === 'CLIENT' ? 'Support Center' : ticket.clientName)}
                       </h4>
                       {lastMessage && (
                         <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">
-                          {formatDate(lastMessage.timestamp)}
+                          {formatTime(lastMessage.timestamp)}
                         </span>
                       )}
                     </div>
@@ -138,7 +164,7 @@ export const MessagesView: React.FC = () => {
                       "text-xs truncate",
                       unreadCount > 0 ? "font-bold text-gray-900" : "text-gray-500"
                     )}>
-                      {lastMessage ? lastMessage.text : 'No messages yet. Start the conversation!'}
+                      {lastMessage ? lastMessage.text : 'No messages yet.'}
                     </p>
                   </div>
                 </button>
@@ -185,6 +211,21 @@ export const MessagesView: React.FC = () => {
                 </div>
               ) : (
                 selectedConversation.messages.map((msg) => {
+                  if (msg.isSystem) {
+                    return (
+                      <div key={msg.id} className="flex justify-center">
+                        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 text-center max-w-md shadow-sm">
+                          <div className="flex items-center justify-center gap-2 text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">
+                            <Shield className="h-3 w-3" />
+                            System Notification
+                          </div>
+                          <p className="text-xs text-amber-900 font-medium">{msg.text}</p>
+                          <span className="text-[9px] text-amber-500 mt-1 block">{formatTime(msg.timestamp)}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isMe = msg.senderId === currentUser.id;
                   return (
                     <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>

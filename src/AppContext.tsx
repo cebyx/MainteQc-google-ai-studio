@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, ActivityEvent } from './types';
 import { auth, db, googleProvider } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where } from 'firebase/firestore';
 
 enum OperationType {
   CREATE = 'create',
@@ -73,6 +73,9 @@ interface AppContextType {
   updateProperty: (id: string, updates: Partial<Property>) => Promise<void>;
   logActivity: (activity: Omit<ActivityEvent, 'id' | 'timestamp'>) => Promise<void>;
   createNotification: (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => Promise<void>;
+  createSystemMessage: (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => Promise<void>;
+  approveTicket: (id: string) => Promise<void>;
+  rejectTicket: (id: string) => Promise<void>;
   rescheduleTicket: (id: string, date: string, time: string) => Promise<void>;
   assignTechnician: (id: string, techId: string, techName: string) => Promise<void>;
   login: () => Promise<void>;
@@ -181,74 +184,127 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, (error) => handleFirestoreError(error, OperationType.GET, 'brandSettings/main'));
 
     // Listen to Quotes
-    const unsubQuotes = onSnapshot(collection(db, 'quotes'), (snapshot) => {
+    let quotesQuery;
+    if (role === 'ADMIN') {
+      quotesQuery = collection(db, 'quotes');
+    } else if (role === 'CLIENT') {
+      quotesQuery = query(collection(db, 'quotes'), where('clientId', '==', currentUser.id));
+    } else {
+      quotesQuery = null;
+    }
+
+    const unsubQuotes = quotesQuery ? onSnapshot(quotesQuery, (snapshot) => {
       const allQuotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Quote));
-      if (role === 'ADMIN') {
-        setQuotes(allQuotes);
-      } else if (role === 'CLIENT') {
-        setQuotes(allQuotes.filter(q => q.clientId === currentUser.id));
-      } else {
-        setQuotes([]);
-      }
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'quotes'));
+      setQuotes(allQuotes);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'quotes')) : () => {};
 
     // Listen to Invoices
-    const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
+    let invoicesQuery;
+    if (role === 'ADMIN') {
+      invoicesQuery = collection(db, 'invoices');
+    } else if (role === 'CLIENT') {
+      invoicesQuery = query(collection(db, 'invoices'), where('clientId', '==', currentUser.id));
+    } else {
+      invoicesQuery = null;
+    }
+
+    const unsubInvoices = invoicesQuery ? onSnapshot(invoicesQuery, (snapshot) => {
       const allInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
-      if (role === 'ADMIN') {
-        setInvoices(allInvoices);
-      } else if (role === 'CLIENT') {
-        setInvoices(allInvoices.filter(i => i.clientId === currentUser.id));
-      } else {
-        setInvoices([]);
-      }
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'invoices'));
+      setInvoices(allInvoices);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'invoices')) : () => {};
 
     // Listen to Tickets
-    const unsubTickets = onSnapshot(collection(db, 'tickets'), (snapshot) => {
+    let ticketsQuery;
+    if (role === 'ADMIN') {
+      ticketsQuery = collection(db, 'tickets');
+    } else if (role === 'TECHNICIAN') {
+      ticketsQuery = query(collection(db, 'tickets'), where('assignedTechnicianId', '==', currentUser.id));
+    } else {
+      ticketsQuery = query(collection(db, 'tickets'), where('clientId', '==', currentUser.id));
+    }
+
+    const unsubTickets = onSnapshot(ticketsQuery, (snapshot) => {
       const allTickets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ticket));
-      
-      // Filter based on role
-      if (role === 'ADMIN') {
-        setTickets(allTickets);
-      } else if (role === 'TECHNICIAN') {
-        setTickets(allTickets.filter(t => t.assignedTechnicianId === currentUser.id));
-      } else {
-        setTickets(allTickets.filter(t => t.clientId === currentUser.id));
-      }
+      setTickets(allTickets);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'tickets'));
 
     // Listen to Properties
-    const unsubProperties = onSnapshot(collection(db, 'properties'), (snapshot) => {
+    let propertiesQuery;
+    if (role === 'ADMIN' || role === 'TECHNICIAN') {
+      propertiesQuery = collection(db, 'properties');
+    } else {
+      propertiesQuery = query(collection(db, 'properties'), where('clientId', '==', currentUser.id));
+    }
+
+    const unsubProperties = onSnapshot(propertiesQuery, (snapshot) => {
       const allProps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
-      
-      if (role === 'ADMIN' || role === 'TECHNICIAN') {
-        setProperties(allProps);
-      } else {
-        setProperties(allProps.filter(p => p.clientId === currentUser.id));
-      }
+      setProperties(allProps);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'properties'));
 
     // Listen to Messages
-    const unsubMessages = onSnapshot(collection(db, 'messages'), (snapshot) => {
-      const allMsgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-      
-      if (role === 'ADMIN') {
+    let messagesQuery;
+    if (role === 'ADMIN') {
+      messagesQuery = collection(db, 'messages');
+    } else {
+      // For non-admins, we need to listen to messages where they are either sender or recipient
+      // Firestore doesn't support OR queries easily with where, but we can use where('senderId', '==', id) 
+      // and where('recipientId', '==', id) separately or use a more complex rule.
+      // Actually, for simplicity and to match rules, we'll try to use a query that matches the rules.
+      // Since we can't do OR in a single where, we might need two listeners or a different approach.
+      // However, for now, let's use a query that at least filters by one side if possible, 
+      // or just keep it as is if the rules allow it (but they don't for list without filter).
+      // Let's use a query that filters by senderId OR recipientId if possible, but Firestore doesn't do that.
+      // We'll use two listeners or just one and filter client side IF the rules allow it.
+      // But the rules for messages are: isAdmin() || isOwner(senderId) || isOwner(recipientId).
+      // So a client can't list ALL messages.
+      // I'll use two queries and merge them.
+      messagesQuery = collection(db, 'messages'); // Fallback, will likely fail for clients if not filtered
+    }
+
+    // Special handling for Messages for non-admins
+    let unsubMessages = () => {};
+    if (role === 'ADMIN') {
+      unsubMessages = onSnapshot(collection(db, 'messages'), (snapshot) => {
+        const allMsgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
         setMessages(allMsgs);
-      } else {
-        setMessages(allMsgs.filter(m => m.senderId === currentUser.id || m.recipientId === currentUser.id));
-      }
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages'));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages'));
+    } else {
+      // For Clients/Technicians, we listen to messages where they are involved
+      const q1 = query(collection(db, 'messages'), where('senderId', '==', currentUser.id));
+      const q2 = query(collection(db, 'messages'), where('recipientId', '==', currentUser.id));
+      
+      const unsub1 = onSnapshot(q1, (s1) => {
+        const msgs1 = s1.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+        setMessages(prev => {
+          const otherMsgs = prev.filter(m => m.recipientId === currentUser.id);
+          const combined = [...msgs1, ...otherMsgs];
+          return Array.from(new Map(combined.map(m => [m.id, m])).values());
+        });
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages-sent'));
+
+      const unsub2 = onSnapshot(q2, (s2) => {
+        const msgs2 = s2.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+        setMessages(prev => {
+          const otherMsgs = prev.filter(m => m.senderId === currentUser.id);
+          const combined = [...otherMsgs, ...msgs2];
+          return Array.from(new Map(combined.map(m => [m.id, m])).values());
+        });
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages-received'));
+
+      unsubMessages = () => { unsub1(); unsub2(); };
+    }
 
     // Listen to Activities
-    const unsubActivities = onSnapshot(collection(db, 'activities'), (snapshot) => {
+    let activitiesQuery;
+    if (role === 'ADMIN' || role === 'TECHNICIAN') {
+      activitiesQuery = collection(db, 'activities');
+    } else {
+      activitiesQuery = query(collection(db, 'activities'), where('clientId', '==', currentUser.id));
+    }
+
+    const unsubActivities = onSnapshot(activitiesQuery, (snapshot) => {
       const allActivities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityEvent));
-      
-      if (role === 'ADMIN' || role === 'TECHNICIAN') {
-        setActivities(allActivities);
-      } else {
-        setActivities(allActivities.filter(a => a.clientId === currentUser.id));
-      }
+      setActivities(allActivities);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'activities'));
 
     return () => {
@@ -281,22 +337,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateTicket = async (id: string, updates: Partial<Ticket>) => {
     try {
-      await updateDoc(doc(db, 'tickets', id), updates);
       const ticket = tickets.find(t => t.id === id);
+      await updateDoc(doc(db, 'tickets', id), updates);
+      
       if (ticket && updates.status && updates.status !== ticket.status) {
         await logActivity({
           ticketId: id,
           clientId: ticket.clientId,
           type: 'status_changed',
-          description: `Ticket status changed from ${ticket.status} to ${updates.status}`,
+          description: `Ticket status changed from ${ticket.status.replace('_', ' ')} to ${updates.status.replace('_', ' ')}`,
           actorId: currentUser.id,
           actorName: currentUser.fullName,
           actorRole: role,
         });
-        if (role === 'ADMIN' && updates.status === 'approved') {
-          await createNotification(id, ticket.clientId, 'CLIENT', `Your service request #${id.slice(-6)} has been approved.`);
+        
+        // Auto-notifications for major status changes
+        if (updates.status === 'scheduled' && ticket.clientId) {
+          await createSystemMessage(id, ticket.clientId, 'CLIENT', `Your appointment for ticket #${id.slice(-6)} has been scheduled.`);
+        } else if (updates.status === 'completed' && ticket.clientId) {
+          await createSystemMessage(id, ticket.clientId, 'CLIENT', `Your service request #${id.slice(-6)} has been completed.`);
         }
       }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
+    }
+  };
+
+  const approveTicket = async (id: string) => {
+    try {
+      const ticket = tickets.find(t => t.id === id);
+      if (!ticket) return;
+      await updateDoc(doc(db, 'tickets', id), { status: 'approved' });
+      await logActivity({
+        ticketId: id,
+        clientId: ticket.clientId,
+        type: 'ticket_approved',
+        description: 'Service request approved',
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+      await createSystemMessage(id, ticket.clientId, 'CLIENT', `Your service request #${id.slice(-6)} has been approved.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
+    }
+  };
+
+  const rejectTicket = async (id: string) => {
+    try {
+      const ticket = tickets.find(t => t.id === id);
+      if (!ticket) return;
+      await updateDoc(doc(db, 'tickets', id), { status: 'rejected' });
+      await logActivity({
+        ticketId: id,
+        clientId: ticket.clientId,
+        type: 'ticket_rejected',
+        description: 'Service request rejected',
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+      await createSystemMessage(id, ticket.clientId, 'CLIENT', `Your service request #${id.slice(-6)} has been rejected.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
     }
@@ -556,22 +657,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const createNotification = async (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => {
+  const createSystemMessage = async (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => {
     try {
       const newMessage = {
         ticketId,
-        senderId: currentUser.id,
-        senderRole: role,
+        senderId: 'system',
+        senderRole: 'ADMIN' as UserRole,
         recipientId,
         recipientRole,
         text,
         timestamp: new Date().toISOString(),
         read: false,
+        isSystem: true,
       };
       await addDoc(collection(db, 'messages'), newMessage);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'messages');
     }
+  };
+
+  const createNotification = async (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => {
+    // Legacy support, now uses createSystemMessage
+    return createSystemMessage(ticketId, recipientId, recipientRole, text);
   };
 
   const rescheduleTicket = async (id: string, date: string, time: string) => {
@@ -622,7 +729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages, activities,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, updateCurrentUserProfile,
-      createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, rescheduleTicket, assignTechnician,
+      createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady
     }}>
       {children}

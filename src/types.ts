@@ -137,6 +137,7 @@ export interface Message {
   ticketId?: string;
   timestamp: string;
   read: boolean;
+  isSystem?: boolean;
 }
 
 export interface ActivityEvent {
@@ -149,5 +150,5 @@ export interface ActivityEvent {
   actorName: string;
   actorRole: UserRole;
   timestamp: string;
-  metadata?: any;
+  metadata?: Record<string, any>;
 }

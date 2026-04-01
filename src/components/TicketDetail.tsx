@@ -25,7 +25,10 @@ interface TicketDetailProps {
 }
 
 const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; editedTicket: Partial<Ticket>; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void; onClose: () => void }> = ({ ticket, currentTicket, editedTicket, handleChange, handleSave, handleStatusChange, onClose }) => {
-  const { technicians } = useApp();
+  const { technicians, approveTicket, rejectTicket } = useApp();
+  
+  const isPending = ticket.status === 'pending_review';
+  
   return (
     <div className="space-y-8">
       <section>
@@ -33,10 +36,33 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
         <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
       </section>
 
+      {isPending && (
+        <section className="rounded-2xl bg-amber-50 p-6 border border-amber-200">
+          <h4 className="flex items-center gap-2 font-bold text-amber-900 mb-4">
+            <AlertTriangle className="h-5 w-5" />
+            Review Required
+          </h4>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => approveTicket(ticket.id)}
+              className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-colors"
+            >
+              Approve Request
+            </button>
+            <button 
+              onClick={() => rejectTicket(ticket.id)}
+              className="flex-1 rounded-xl bg-white border border-red-200 py-3 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Reject Request
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200">
         <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">
           <Clipboard className="h-5 w-5" />
-          Dispatch Management
+          Dispatch & Scheduling
         </h4>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -73,7 +99,7 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
             >
               <option value="">Unassigned</option>
               {technicians.map(tech => (
-                <option key={tech.id} value={tech.id}>{tech.fullName}</option>
+                <option key={tech.id} value={tech.id}>{tech.fullName} ({tech.status})</option>
               ))}
             </select>
           </div>
@@ -89,22 +115,13 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
               ))}
             </select>
           </div>
-          <div className="flex gap-2">
+          <div className="pt-2">
             <button 
-              className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50"
+              className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-colors"
               onClick={handleSave}
               disabled={Object.keys(editedTicket).length === 0}
             >
-              Save Changes
-            </button>
-            <button 
-              className="flex-1 rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600"
-              onClick={() => {
-                handleStatusChange('rejected');
-                onClose();
-              }}
-            >
-              Reject Ticket
+              Update Dispatch Details
             </button>
           </div>
         </div>
@@ -227,12 +244,16 @@ const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
 };
 
 export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) => {
-  const { role, updateTicket, rescheduleTicket, assignTechnician, activities } = useApp();
+  const { role, updateTicket, rescheduleTicket, assignTechnician, activities, clients, properties, messages } = useApp();
   const [editedTicket, setEditedTicket] = useState<Partial<Ticket>>({});
 
   const ticketActivities = activities
     .filter(a => a.ticketId === ticket.id)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const client = clients.find(c => c.id === ticket.clientId);
+  const property = properties.find(p => p.id === ticket.propertyId);
+  const ticketMessages = messages.filter(m => m.ticketId === ticket.id);
 
   const handleStatusChange = (newStatus: JobStatus) => {
     updateTicket(ticket.id, { status: newStatus });
@@ -342,10 +363,12 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) =
                       </div>
                     </div>
                     <div className="space-y-2 pt-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Phone className="h-4 w-4 text-gray-400" />
-                        (555) 123-4567
-                      </div>
+                      {client?.phone && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Phone className="h-4 w-4 text-gray-400" />
+                          {client.phone}
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Mail className="h-4 w-4 text-gray-400" />
                         {ticket.createdByEmail}
@@ -366,10 +389,12 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) =
                       <div className="text-sm text-gray-500 leading-tight">{ticket.serviceAddress}</div>
                     </div>
                   </div>
-                  <div className="rounded-xl bg-gray-50 p-3">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Access Instructions</div>
-                    <div className="text-xs text-gray-600 italic">"Key code 1234 at front desk."</div>
-                  </div>
+                  {property?.accessInstructions && (
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Access Instructions</div>
+                      <div className="text-xs text-gray-600 italic">"{property.accessInstructions}"</div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -407,7 +432,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) =
         <div className="border-t border-gray-100 bg-gray-50/50 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <MessageSquare className="h-4 w-4" />
-            <span>2 messages linked to this ticket</span>
+            <span>{ticketMessages.length} message{ticketMessages.length !== 1 ? 's' : ''} linked to this ticket</span>
           </div>
           <button 
             onClick={onClose}
