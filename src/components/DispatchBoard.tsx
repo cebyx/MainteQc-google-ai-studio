@@ -15,8 +15,12 @@ export const DispatchBoard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>('all');
   const [urgencyFilter, setUrgencyFilter] = useState<string | 'all'>('all');
+  const [techFilter, setTechFilter] = useState<string | 'all'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
 
   const columns: JobStatus[] = ['pending_review', 'approved', 'scheduled', 'in_progress', 'waiting_on_parts'];
+
+  const categories = Array.from(new Set(tickets.map(t => t.category))).filter(Boolean);
 
   const filteredTickets = tickets.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -26,8 +30,10 @@ export const DispatchBoard: React.FC = () => {
     
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchesUrgency = urgencyFilter === 'all' || t.urgency === urgencyFilter;
+    const matchesTech = techFilter === 'all' || t.assignedTechnicianId === techFilter;
+    const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
 
-    return matchesSearch && matchesStatus && matchesUrgency;
+    return matchesSearch && matchesStatus && matchesUrgency && matchesTech && matchesCategory;
   });
 
   const getTicketsByStatus = (status: JobStatus) => filteredTickets.filter(t => t.status === status);
@@ -62,28 +68,52 @@ export const DispatchBoard: React.FC = () => {
             />
           </div>
           
-          <select 
-            className="h-10 rounded-xl border-gray-200 text-sm font-medium focus:ring-blue-500"
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as any)}
-          >
-            <option value="all">All Statuses</option>
-            {Object.entries(STATUS_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap gap-2">
+            <select 
+              className="h-10 rounded-xl border-gray-200 text-sm font-medium focus:ring-blue-500"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as any)}
+            >
+              <option value="all">All Statuses</option>
+              {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
 
-          <select 
-            className="h-10 rounded-xl border-gray-200 text-sm font-medium focus:ring-blue-500"
-            value={urgencyFilter}
-            onChange={e => setUrgencyFilter(e.target.value)}
-          >
-            <option value="all">All Urgency</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="emergency">Emergency</option>
-          </select>
+            <select 
+              className="h-10 rounded-xl border-gray-200 text-sm font-medium focus:ring-blue-500"
+              value={techFilter}
+              onChange={e => setTechFilter(e.target.value)}
+            >
+              <option value="all">All Technicians</option>
+              {technicians.map(tech => (
+                <option key={tech.id} value={tech.id}>{tech.fullName}</option>
+              ))}
+            </select>
+
+            <select 
+              className="h-10 rounded-xl border-gray-200 text-sm font-medium focus:ring-blue-500"
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+
+            <select 
+              className="h-10 rounded-xl border-gray-200 text-sm font-medium focus:ring-blue-500"
+              value={urgencyFilter}
+              onChange={e => setUrgencyFilter(e.target.value)}
+            >
+              <option value="all">All Urgency</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="emergency">Emergency</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -147,6 +177,24 @@ export const DispatchBoard: React.FC = () => {
                           <span>{formatDate(ticket.scheduledDate)} @ {ticket.scheduledTime}</span>
                         </div>
                       )}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {ticket.quoteStatus && ticket.quoteStatus !== 'none' && (
+                          <span className={cn(
+                            "text-[8px] px-1.5 py-0.5 rounded-full font-bold border",
+                            ticket.quoteStatus === 'accepted' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-gray-50 text-gray-600 border-gray-100"
+                          )}>
+                            QUOTE: {ticket.quoteStatus.toUpperCase()}
+                          </span>
+                        )}
+                        {ticket.invoiceStatus && ticket.invoiceStatus !== 'none' && (
+                          <span className={cn(
+                            "text-[8px] px-1.5 py-0.5 rounded-full font-bold border",
+                            ticket.invoiceStatus === 'paid' ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-amber-50 text-amber-700 border-amber-100"
+                          )}>
+                            INV: {ticket.invoiceStatus.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="mt-4 flex items-center justify-between border-t border-gray-50 pt-3">
@@ -162,23 +210,22 @@ export const DispatchBoard: React.FC = () => {
                       )}
                       
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {ticket.status === 'pending_review' ? (
+                        {ticket.status === 'pending_review' && (
                           <button 
                             onClick={(e) => { e.stopPropagation(); approveTicket(ticket.id); }}
                             className="rounded-lg bg-emerald-50 p-1.5 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-colors"
                             title="Approve"
                           >
-                            <User className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setSelectedTicket(ticket); }}
-                            className="rounded-lg bg-blue-50 p-1.5 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors"
-                            title="Dispatch"
-                          >
-                            <Calendar className="h-3.5 w-3.5" />
+                            <Clipboard className="h-3.5 w-3.5" />
                           </button>
                         )}
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setSelectedTicket(ticket); }}
+                          className="rounded-lg bg-blue-50 p-1.5 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors"
+                          title="View & Edit"
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>

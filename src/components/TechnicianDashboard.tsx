@@ -7,15 +7,18 @@ import {
   ChevronRight,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  MessageSquare,
+  History,
+  Navigation
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
 import { TicketDetail } from './TicketDetail';
-import { Ticket } from '../types';
+import { Ticket, ActivityEvent, Message } from '../types';
 
 export const TechnicianDashboard: React.FC = () => {
-  const { tickets, currentUser } = useApp();
+  const { tickets, currentUser, activities, messages, updateTicket } = useApp();
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // Filter jobs assigned to this technician
@@ -23,6 +26,21 @@ export const TechnicianDashboard: React.FC = () => {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayJobs = myJobs.filter(t => t.scheduledDate === todayStr && t.status !== 'completed');
   const completedToday = myJobs.filter(t => t.scheduledDate === todayStr && t.status === 'completed').length;
+  
+  // Active job (in progress)
+  const activeJob = myJobs.find(t => t.status === 'in_progress');
+  
+  // Recent Activity
+  const myActivities = activities
+    .filter(a => myJobs.some(t => t.id === a.ticketId))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5);
+
+  // Recent Messages
+  const myMessages = messages
+    .filter(m => m.senderId === currentUser.id || m.recipientId === currentUser.id)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 3);
 
   return (
     <div className="space-y-6 pb-20">
@@ -50,80 +68,193 @@ export const TechnicianDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Today's Jobs */}
-      <div>
-        <h3 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
-          <Clock className="h-5 w-5 text-blue-600" />
-          Today's Schedule
-        </h3>
-        
-        <div className="space-y-4">
-          {todayJobs.length > 0 ? (
-            todayJobs.map((job) => (
-              <div key={job.id} className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm active:scale-[0.98] transition-all">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <UrgencyBadge urgency={job.urgency} />
-                    <StatusBadge status={job.status} />
-                  </div>
-                  <div className="text-sm font-bold text-blue-600">{job.scheduledTime}</div>
+      {/* Active Job Focus */}
+      {activeJob && (
+        <div className="relative overflow-hidden rounded-3xl bg-indigo-900 p-6 text-white shadow-xl">
+          <div className="relative z-10">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/30 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-100 backdrop-blur-sm">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400"></span>
+                Currently In Progress
+              </span>
+              <UrgencyBadge urgency={activeJob.urgency} />
+            </div>
+            <h2 className="text-xl font-bold">{activeJob.title}</h2>
+            <div className="mt-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <MapPin className="mt-0.5 h-4 w-4 text-indigo-400" />
+                <div className="text-sm">
+                  <div className="font-bold">{activeJob.propertyNickname}</div>
+                  <div className="text-indigo-200/70">{activeJob.serviceAddress}</div>
                 </div>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button 
+                onClick={() => setSelectedTicket(activeJob)}
+                className="flex-1 rounded-xl bg-white py-3 text-sm font-bold text-indigo-900 shadow-lg transition-transform active:scale-95"
+              >
+                View Job Details
+              </button>
+              <button 
+                onClick={() => updateTicket(activeJob.id, { status: 'completed' })}
+                className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white shadow-lg transition-transform active:scale-95"
+              >
+                Complete Job
+              </button>
+              <a 
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.serviceAddress)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-800 text-white transition-colors hover:bg-indigo-700"
+              >
+                <Navigation className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+          <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-indigo-500/20 blur-3xl"></div>
+        </div>
+      )}
 
-                <h4 className="text-lg font-bold text-gray-900 leading-tight mb-1">{job.title}</h4>
-                <p className="text-sm text-gray-500 mb-4 line-clamp-2">{job.description}</p>
+      {/* Today's Jobs */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-4">
+          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-blue-600" />
+            Today's Schedule
+          </h3>
+          
+          <div className="space-y-4">
+            {todayJobs.filter(j => j.id !== activeJob?.id).length > 0 ? (
+              todayJobs.filter(j => j.id !== activeJob?.id).map((job) => (
+                <div key={job.id} className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm active:scale-[0.98] transition-all">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <UrgencyBadge urgency={job.urgency} />
+                      <StatusBadge status={job.status} />
+                    </div>
+                    <div className="text-sm font-bold text-blue-600">{job.scheduledTime}</div>
+                  </div>
 
-                <div className="space-y-2 border-t border-gray-50 pt-4">
-                  <div className="flex items-start gap-3">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-                    <div className="text-sm">
-                      <div className="font-bold text-gray-900">{job.propertyNickname}</div>
-                      <div className="text-gray-500 leading-tight">{job.serviceAddress}</div>
+                  <h4 className="text-lg font-bold text-gray-900 leading-tight mb-1">{job.title}</h4>
+                  <p className="text-sm text-gray-500 mb-4 line-clamp-2">{job.description}</p>
+
+                  <div className="space-y-2 border-t border-gray-50 pt-4">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                      <div className="text-sm">
+                        <div className="font-bold text-gray-900">{job.propertyNickname}</div>
+                        <div className="text-gray-500 leading-tight">{job.serviceAddress}</div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Phone className="h-4 w-4 shrink-0 text-gray-400" />
-                    <div className="text-sm font-medium text-gray-900">{job.clientName}</div>
+
+                  <div className="mt-4 flex gap-2">
+                    <button onClick={() => setSelectedTicket(job)} className="flex-1 rounded-xl bg-white border border-gray-200 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 active:scale-95 transition-all">
+                      View Details
+                    </button>
+                    {!activeJob && (
+                      <button 
+                        onClick={() => updateTicket(job.id, { status: 'in_progress' })}
+                        className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-100 active:scale-95 transition-all"
+                      >
+                        Start Job
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <div className="mt-4 flex gap-2">
-                  <button onClick={() => setSelectedTicket(job)} className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-100 active:bg-blue-700">
-                    Start Job
-                  </button>
-                  <button onClick={() => setSelectedTicket(job)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 active:bg-gray-100">
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
+              ))
+            ) : !activeJob ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
+                <div className="mb-3 rounded-full bg-gray-100 p-4">
+                  <CheckCircle2 className="h-8 w-8 text-gray-400" />
                 </div>
+                <h4 className="font-bold text-gray-900">All caught up!</h4>
+                <p className="text-sm text-gray-500">No more jobs scheduled for today.</p>
               </div>
-            ))
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
-              <div className="mb-3 rounded-full bg-gray-100 p-4">
-                <CheckCircle2 className="h-8 w-8 text-gray-400" />
+            ) : todayJobs.length === 1 ? (
+              <div className="rounded-2xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+                You are currently working on your only scheduled job for today.
               </div>
-              <h4 className="font-bold text-gray-900">All caught up!</h4>
-              <p className="text-sm text-gray-500">No more jobs scheduled for today.</p>
-            </div>
-          )}
-        </div>
-      </div>
+            ) : null}
+          </div>
 
-      {/* Upcoming */}
-      <div className="rounded-2xl bg-gray-900 p-6 text-white">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold">Upcoming Jobs</h3>
-          <button className="text-xs font-bold text-blue-400 uppercase tracking-widest">View All</button>
-        </div>
-        <div className="space-y-4">
-          {myJobs.filter(t => t.scheduledDate !== todayStr && t.status !== 'completed').slice(0, 2).map(job => (
-            <div key={job.id} onClick={() => setSelectedTicket(job)} className="flex items-center justify-between border-b border-white/10 pb-4 last:border-0 last:pb-0 cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors">
-              <div>
-                <div className="text-sm font-bold">{job.title}</div>
-                <div className="text-xs text-gray-400">{formatDate(job.scheduledDate || '')} • {job.scheduledTime}</div>
-              </div>
-              <ChevronRight className="h-4 w-4 text-gray-500" />
+          {/* Recent Activity */}
+          <div className="pt-4">
+            <h3 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
+              <History className="h-5 w-5 text-blue-600" />
+              Recent Activity
+            </h3>
+            <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+              {myActivities.length > 0 ? (
+                myActivities.map((activity, idx) => (
+                  <div key={activity.id} className={cn(
+                    "flex items-start gap-3 p-4",
+                    idx !== myActivities.length - 1 && "border-b border-gray-50"
+                  )}>
+                    <div className="mt-1 rounded-full bg-blue-50 p-1.5 text-blue-600">
+                      <CheckCircle2 className="h-3 w-3" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">{activity.description}</div>
+                      <div className="text-[10px] text-gray-400">{formatDate(activity.timestamp)}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-sm text-gray-400">No recent activity.</div>
+              )}
             </div>
-          ))}
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Messages */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-blue-600" />
+                Messages
+              </h3>
+            </div>
+            <div className="space-y-3">
+              {myMessages.length > 0 ? (
+                myMessages.map(msg => (
+                  <div key={msg.id} className="rounded-xl bg-gray-50 p-3">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">{msg.senderRole}</span>
+                      <span className="text-[10px] text-gray-400">{formatDate(msg.timestamp)}</span>
+                    </div>
+                    <p className="text-xs text-gray-700 line-clamp-2">{msg.text}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="py-4 text-center text-xs text-gray-400">No recent messages.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Upcoming */}
+          <div className="rounded-2xl bg-gray-900 p-6 text-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Upcoming Jobs</h3>
+            </div>
+            <div className="space-y-4">
+              {myJobs.filter(t => t.scheduledDate !== todayStr && t.status !== 'completed').slice(0, 3).map(job => (
+                <div key={job.id} onClick={() => setSelectedTicket(job)} className="flex items-center justify-between border-b border-white/10 pb-4 last:border-0 last:pb-0 cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg transition-colors">
+                  <div>
+                    <div className="text-sm font-bold">{job.title}</div>
+                    <div className="text-xs text-gray-400">{formatDate(job.scheduledDate || '')} • {job.scheduledTime}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-500" />
+                </div>
+              ))}
+              {myJobs.filter(t => t.scheduledDate !== todayStr && t.status !== 'completed').length === 0 && (
+                <div className="text-xs text-gray-500 italic">No upcoming jobs.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

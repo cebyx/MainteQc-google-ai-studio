@@ -59,10 +59,13 @@ interface AppContextType {
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
   addMessage: (message: Omit<Message, 'id' | 'timestamp' | 'read'>) => void;
+  markMessageAsRead: (id: string) => Promise<void>;
   saveBrandSettings: (brand: BrandSettings) => Promise<void>;
   createQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => Promise<void>;
+  updateQuote: (id: string, updates: Partial<Quote>) => Promise<void>;
   updateQuoteStatus: (id: string, status: Quote['status']) => Promise<void>;
   createInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => Promise<void>;
+  updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<void>;
   updateInvoiceStatus: (id: string, status: Invoice['status'], paymentMethod?: string) => Promise<void>;
   updateCurrentUserProfile: (updates: any) => Promise<void>;
   createClient: (client: Omit<Client, 'id'>) => Promise<void>;
@@ -442,6 +445,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const markMessageAsRead = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'messages', id), { read: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `messages/${id}`);
+    }
+  };
+
   const saveBrandSettings = async (newBrand: BrandSettings) => {
     try {
       await setDoc(doc(db, 'brandSettings', 'main'), newBrand);
@@ -479,6 +490,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'quotes');
+    }
+  };
+
+  const updateQuote = async (id: string, updates: Partial<Quote>) => {
+    try {
+      await updateDoc(doc(db, 'quotes', id), updates);
+      const quote = quotes.find(q => q.id === id);
+      if (quote && updates.status && updates.status !== quote.status) {
+        updateTicket(quote.ticketId, { quoteStatus: updates.status });
+        await logActivity({
+          ticketId: quote.ticketId,
+          clientId: quote.clientId,
+          type: 'quote_updated',
+          description: `Quote status updated to ${updates.status}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `quotes/${id}`);
+    }
+  };
+
+  const updateInvoice = async (id: string, updates: Partial<Invoice>) => {
+    try {
+      await updateDoc(doc(db, 'invoices', id), updates);
+      const invoice = invoices.find(i => i.id === id);
+      if (invoice && updates.status && updates.status !== invoice.status) {
+        updateTicket(invoice.ticketId, { invoiceStatus: updates.status });
+        await logActivity({
+          ticketId: invoice.ticketId,
+          clientId: invoice.clientId,
+          type: 'invoice_updated',
+          description: `Invoice status updated to ${updates.status}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `invoices/${id}`);
     }
   };
 
@@ -728,9 +781,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages, activities,
-      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, updateCurrentUserProfile,
+      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
-      login, logout, isAuthReady
+      login, logout, isAuthReady, markMessageAsRead
     }}>
       {children}
     </AppContext.Provider>

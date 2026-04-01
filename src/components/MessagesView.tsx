@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
-import { MessageSquare, Send, User, Shield, Wrench, ChevronLeft, Search } from 'lucide-react';
+import { MessageSquare, Send, User, Shield, Wrench, ChevronLeft, Search, ExternalLink } from 'lucide-react';
 import { cn, formatDate, formatTime } from '../lib/utils';
 import { Ticket } from '../types';
+import { TicketDetail } from './TicketDetail';
 
 export const MessagesView: React.FC = () => {
-  const { messages, tickets, currentUser, role, addMessage } = useApp();
+  const { messages, tickets, currentUser, role, addMessage, markMessageAsRead } = useApp();
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'system' | 'direct'>('all');
+  const [showTicketDetail, setShowTicketDetail] = useState<Ticket | null>(null);
 
   // Group messages by ticketId
   const conversations = tickets.filter(t => 
@@ -39,12 +41,27 @@ export const MessagesView: React.FC = () => {
     if (filter === 'direct') return matchesSearch && c.messages.some(m => !m.isSystem);
     return matchesSearch;
   }).sort((a, b) => {
+    // Sort by unread first, then by last message timestamp
+    if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+    if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+    
     const timeA = a.lastMessage ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.ticket.createdAt).getTime();
     const timeB = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.ticket.createdAt).getTime();
     return timeB - timeA;
   });
 
   const selectedConversation = conversations.find(c => c.ticket.id === selectedTicketId);
+
+  // Mark as read when selecting a conversation
+  useEffect(() => {
+    if (selectedConversation) {
+      selectedConversation.messages.forEach(m => {
+        if (!m.read && m.recipientId === currentUser.id) {
+          markMessageAsRead(m.id);
+        }
+      });
+    }
+  }, [selectedTicketId, selectedConversation?.messages.length]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,12 +153,13 @@ export const MessagesView: React.FC = () => {
                   <div className="relative shrink-0 mt-1">
                     <div className={cn(
                       "h-10 w-10 rounded-full flex items-center justify-center font-bold",
-                      lastMessage?.isSystem ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600"
+                      lastMessage?.isSystem ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600",
+                      unreadCount > 0 && "ring-2 ring-blue-500 ring-offset-2"
                     )}>
                       {lastMessage?.isSystem ? <Shield className="h-5 w-5" /> : (role === 'CLIENT' ? 'A' : ticket.clientName.charAt(0))}
                     </div>
                     {unreadCount > 0 && (
-                      <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 border-2 border-white flex items-center justify-center text-[8px] font-bold text-white">
+                      <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center text-[8px] font-bold text-white shadow-sm">
                         {unreadCount}
                       </div>
                     )}
@@ -214,13 +232,22 @@ export const MessagesView: React.FC = () => {
                   if (msg.isSystem) {
                     return (
                       <div key={msg.id} className="flex justify-center">
-                        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 text-center max-w-md shadow-sm">
-                          <div className="flex items-center justify-center gap-2 text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">
+                        <div className="bg-amber-50 border border-amber-100 rounded-2xl px-6 py-4 text-center max-w-md shadow-sm relative group">
+                          <div className="flex items-center justify-center gap-2 text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">
                             <Shield className="h-3 w-3" />
                             System Notification
                           </div>
-                          <p className="text-xs text-amber-900 font-medium">{msg.text}</p>
-                          <span className="text-[9px] text-amber-500 mt-1 block">{formatTime(msg.timestamp)}</span>
+                          <p className="text-sm text-amber-900 font-medium leading-relaxed">{msg.text}</p>
+                          <div className="mt-3 flex items-center justify-center gap-4">
+                            <span className="text-[10px] text-amber-500 font-medium">{formatTime(msg.timestamp)}</span>
+                            <button 
+                              onClick={() => setShowTicketDetail(selectedConversation.ticket)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-900 uppercase tracking-wider"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View Ticket
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -281,6 +308,12 @@ export const MessagesView: React.FC = () => {
           </div>
         )}
       </div>
+      {showTicketDetail && (
+        <TicketDetail 
+          ticket={showTicketDetail} 
+          onClose={() => setShowTicketDetail(null)} 
+        />
+      )}
     </div>
   );
 };
