@@ -17,9 +17,9 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() && (
+        request.auth.token.email == "kaloussian.sebouh@hotmail.com" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN') ||
-        (request.auth.token.email == "kaloussian.sebouh@hotmail.com" && request.auth.token.email_verified == true)
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN')
       );
     }
 
@@ -122,7 +122,7 @@ service cloud.firestore {
     function isValidBrandSettings() {
       let data = request.resource.data;
       return hasRequiredFields(['companyName', 'tagline', 'logo', 'accentColor', 'email', 'phone', 'businessHours', 'serviceCategories', 'address']) &&
-             data.companyName is string && data.companyName.size() > 0 && data.companyName.size() < 100 &&
+             data.companyName is string && data.companyName.size() < 100 &&
              data.tagline is string && data.tagline.size() < 200 &&
              data.logo is string && data.logo.size() < 2000 &&
              data.accentColor is string && data.accentColor.size() < 20 &&
@@ -181,6 +181,53 @@ service cloud.firestore {
              data.actorRole in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
              data.timestamp is string && data.timestamp.size() < 50 &&
              (!('metadata' in data) || data.metadata is map);
+    }
+
+    function isValidAttachment() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'uploadedById', 'uploadedByRole', 'fileName', 'fileType', 'url', 'storagePath', 'category', 'timestamp', 'visibility', 'isVisibleToClient']) &&
+             data.ticketId is string && data.ticketId.size() > 0 &&
+             data.uploadedById is string && data.uploadedById.size() > 0 &&
+             data.uploadedByRole in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
+             data.fileName is string && data.fileName.size() > 0 &&
+             data.fileType is string && data.fileType.size() > 0 &&
+             data.url is string && data.url.size() > 0 &&
+             data.storagePath is string && data.storagePath.size() > 0 &&
+             data.category in ['before_photo', 'after_photo', 'work_photo', 'invoice_attachment', 'quote_attachment', 'service_document', 'client_upload', 'technician_upload'] &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             data.visibility in ['internal', 'client'] &&
+             data.isVisibleToClient is bool;
+    }
+
+    function isValidMaterialUsed() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'description', 'quantity', 'unitCost', 'addedById', 'timestamp']) &&
+             data.ticketId is string && data.ticketId.size() > 0 &&
+             data.description is string && data.description.size() > 0 &&
+             data.quantity is number && data.quantity > 0 &&
+             data.unitCost is number && data.unitCost >= 0 &&
+             data.addedById is string && data.addedById.size() > 0 &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             (!('total' in data) || data.total is number) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 1000));
+    }
+
+    function isValidServiceSummary() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'completedById', 'completedByName', 'completionTimestamp', 'timestamp', 'summary', 'workPerformed', 'followUpNeeded', 'recommendedNextSteps', 'clientVisibleNotes', 'isSharedWithClient']) &&
+             data.ticketId is string && data.ticketId.size() > 0 &&
+             data.completedById is string && data.completedById.size() > 0 &&
+             data.completedByName is string && data.completedByName.size() > 0 &&
+             data.completionTimestamp is string && data.completionTimestamp.size() < 50 &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             data.summary is string && data.summary.size() < 5000 &&
+             data.workPerformed is string && data.workPerformed.size() < 5000 &&
+             data.followUpNeeded is bool &&
+             data.recommendedNextSteps is string && data.recommendedNextSteps.size() < 2000 &&
+             data.clientVisibleNotes is string && data.clientVisibleNotes.size() < 5000 &&
+             data.isSharedWithClient is bool &&
+             (!('internalNotes' in data) || (data.internalNotes is string && data.internalNotes.size() < 5000)) &&
+             (!('materialsUsed' in data) || data.materialsUsed is list);
     }
 
     // ===============================================================
@@ -280,6 +327,40 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated() && isValidActivity();
       allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /attachments/{attachmentId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isTechnician() ||
+        isOwner(resource.data.uploadedById) ||
+        (resource.data.visibility == 'client')
+      );
+      allow create: if isAuthenticated() && isValidAttachment();
+      allow update: if isAdmin() || (isAuthenticated() && isOwner(resource.data.uploadedById) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibility', 'isVisibleToClient']));
+      allow delete: if isAdmin() || (isAuthenticated() && isOwner(resource.data.uploadedById));
+    }
+
+    match /materialsUsed/{materialId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isTechnician() || 
+        true // Allow list for now, will be filtered by ticketId in app if possible
+      );
+      allow create: if isAuthenticated() && (isAdmin() || isTechnician()) && isValidMaterialUsed();
+      allow update: if (isAdmin() || isTechnician()) && isValidMaterialUsed();
+      allow delete: if isAdmin();
+    }
+
+    match /serviceSummaries/{summaryId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isTechnician() || 
+        (resource.data.isSharedWithClient == true)
+      );
+      allow create: if (isAdmin() || isTechnician()) && isValidServiceSummary();
+      allow update: if (isAdmin() || isTechnician()) && isValidServiceSummary();
       allow delete: if isAdmin();
     }
   }

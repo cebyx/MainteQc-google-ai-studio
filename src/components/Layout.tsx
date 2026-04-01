@@ -72,6 +72,7 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'request', label: 'Request Service', icon: Plus },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'history', label: 'History', icon: ClipboardList },
+    { id: 'documents', label: 'Documents', icon: FileText },
     { id: 'billing', label: 'Billing', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'profile', label: 'Profile', icon: User },

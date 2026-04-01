@@ -11,7 +11,8 @@ import {
   History,
   AlertCircle,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  FolderOpen
 } from 'lucide-react';
 import { StatusBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
@@ -19,7 +20,7 @@ import { TicketDetail } from './TicketDetail';
 import { Ticket, Quote, Invoice, ActivityEvent, Message } from '../types';
 
 export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
-  const { tickets, currentUser, properties, quotes, invoices, activities, messages } = useApp();
+  const { tickets, currentUser, properties, quotes, invoices, activities, messages, attachments, serviceSummaries } = useApp();
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // Filter records for this client
@@ -40,6 +41,17 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
   // Recent Messages
   const myMessages = messages
     .filter(m => m.senderId === currentUser.id || m.recipientId === currentUser.id)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 3);
+
+  // Recent Documents
+  const myAttachments = attachments
+    .filter(a => myTickets.some(t => t.id === a.ticketId) && a.isVisibleToClient)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 3);
+
+  const mySummaries = serviceSummaries
+    .filter(s => myTickets.some(t => t.id === s.ticketId) && s.isSharedWithClient)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 3);
 
@@ -189,12 +201,18 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
 
         {/* Sidebar: Quick Links, Properties, Messages */}
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <button onClick={() => setActiveTab('history')} className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
               <div className="rounded-xl bg-blue-100 p-3 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <History className="h-6 w-6" />
               </div>
               <span className="text-sm font-bold text-gray-700">History</span>
+            </button>
+            <button onClick={() => setActiveTab('documents')} className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
+              <div className="rounded-xl bg-amber-100 p-3 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                <FolderOpen className="h-6 w-6" />
+              </div>
+              <span className="text-sm font-bold text-gray-700">Records</span>
             </button>
             <button onClick={() => setActiveTab('billing')} className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 group">
               <div className="rounded-xl bg-indigo-100 p-3 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
@@ -202,6 +220,49 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
               </div>
               <span className="text-sm font-bold text-gray-700">Billing</span>
             </button>
+          </div>
+
+          {/* Recent Records */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-amber-600" />
+                Recent Records
+              </h3>
+              <button onClick={() => setActiveTab('documents')} className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">View All</button>
+            </div>
+            <div className="space-y-3">
+              {mySummaries.length > 0 || myAttachments.length > 0 ? (
+                <>
+                  {mySummaries.map(summary => (
+                    <div key={summary.id} className="flex items-center gap-3 rounded-xl bg-gray-50 p-3">
+                      <div className="rounded-lg bg-white p-2 shadow-sm text-amber-600">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="text-xs font-bold text-gray-900 truncate">Service Summary</div>
+                        <div className="text-[10px] text-gray-500">Ticket #{summary.ticketId.slice(-4)}</div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                    </div>
+                  ))}
+                  {myAttachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-3 rounded-xl bg-gray-50 p-3">
+                      <div className="rounded-lg bg-white p-2 shadow-sm text-blue-600">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="text-xs font-bold text-gray-900 truncate">{att.fileName}</div>
+                        <div className="text-[10px] text-gray-500">{att.category}</div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="py-4 text-center text-xs text-gray-400">No recent records.</div>
+              )}
+            </div>
           </div>
 
           {/* Recent Messages */}

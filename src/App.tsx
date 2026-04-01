@@ -17,6 +17,7 @@ import { MyJobsView } from './components/MyJobsView';
 import { AppointmentsListView } from './components/AppointmentsListView';
 import { ServiceHistoryView } from './components/ServiceHistoryView';
 import { ProfileView } from './components/ProfileView';
+import { DocumentsCenter } from './components/DocumentsCenter';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Shield, Wrench, User, LogIn, LogOut } from 'lucide-react';
 
@@ -90,6 +91,7 @@ const AppContent: React.FC = () => {
         case 'request': return <RequestForm onSuccess={() => setActiveTab('dashboard')} />;
         case 'appointments': return <AppointmentsListView setActiveTab={setActiveTab} />;
         case 'history': return <ServiceHistoryView />;
+        case 'documents': return <DocumentsCenter />;
         case 'billing': return <BillingView />;
         case 'messages': return <MessagesView />;
         case 'profile': return <ProfileView />;

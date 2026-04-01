@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, ActivityEvent } from './types';
-import { auth, db, googleProvider } from './firebase';
+import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, ActivityEvent, Attachment, MaterialUsed, ServiceSummary } from './types';
+import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 enum OperationType {
   CREATE = 'create',
@@ -81,6 +82,17 @@ interface AppContextType {
   rejectTicket: (id: string) => Promise<void>;
   rescheduleTicket: (id: string, date: string, time: string) => Promise<void>;
   assignTechnician: (id: string, techId: string, techName: string) => Promise<void>;
+  attachments: Attachment[];
+  materialsUsed: MaterialUsed[];
+  serviceSummaries: ServiceSummary[];
+  uploadAttachment: (ticketId: string, file: File, category: Attachment['category'], visibility: Attachment['visibility']) => Promise<void>;
+  deleteAttachment: (id: string) => Promise<void>;
+  updateAttachmentVisibility: (id: string, visibility: Attachment['visibility']) => Promise<void>;
+  addMaterialUsed: (material: Omit<MaterialUsed, 'id' | 'timestamp' | 'addedById'>) => Promise<void>;
+  updateMaterialUsed: (id: string, updates: Partial<MaterialUsed>) => Promise<void>;
+  deleteMaterialUsed: (id: string) => Promise<void>;
+  saveServiceSummary: (summary: Omit<ServiceSummary, 'id' | 'completionTimestamp' | 'completedById' | 'completedByName'>) => Promise<void>;
+  updateServiceSummary: (id: string, updates: Partial<ServiceSummary>) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -103,6 +115,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [materialsUsed, setMaterialsUsed] = useState<MaterialUsed[]>([]);
+  const [serviceSummaries, setServiceSummaries] = useState<ServiceSummary[]>([]);
 
   // Test connection on boot
   useEffect(() => {
@@ -310,6 +325,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActivities(allActivities);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'activities'));
 
+    // Listen to Attachments
+    let attachmentsQuery;
+    if (role === 'ADMIN' || role === 'TECHNICIAN') {
+      attachmentsQuery = collection(db, 'attachments');
+    } else {
+      attachmentsQuery = query(collection(db, 'attachments'), where('visibility', '==', 'client'));
+    }
+    const unsubAttachments = onSnapshot(attachmentsQuery, (snapshot) => {
+      const allAttachments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Attachment));
+      setAttachments(allAttachments);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'attachments'));
+
+    // Listen to Materials Used
+    let materialsQuery;
+    if (role === 'ADMIN' || role === 'TECHNICIAN') {
+      materialsQuery = collection(db, 'materialsUsed');
+    } else {
+      materialsQuery = collection(db, 'materialsUsed'); // Clients can see if they have access to the ticket
+    }
+    const unsubMaterials = onSnapshot(materialsQuery, (snapshot) => {
+      const allMaterials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MaterialUsed));
+      setMaterialsUsed(allMaterials);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'materialsUsed'));
+
+    // Listen to Service Summaries
+    let summariesQuery;
+    if (role === 'ADMIN' || role === 'TECHNICIAN') {
+      summariesQuery = collection(db, 'serviceSummaries');
+    } else {
+      summariesQuery = collection(db, 'serviceSummaries');
+    }
+    const unsubSummaries = onSnapshot(summariesQuery, (snapshot) => {
+      const allSummaries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceSummary));
+      setServiceSummaries(allSummaries);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'serviceSummaries'));
+
     return () => {
       unsubUsers();
       unsubBrand();
@@ -319,6 +370,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubProperties();
       unsubMessages();
       unsubActivities();
+      unsubAttachments();
+      unsubMaterials();
+      unsubSummaries();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -777,10 +831,156 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const uploadAttachment = async (ticketId: string, file: File, category: Attachment['category'], visibility: Attachment['visibility']) => {
+    try {
+      const storagePath = `tickets/${ticketId}/${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+
+      const attachment: Omit<Attachment, 'id'> = {
+        ticketId,
+        uploadedById: currentUser.id,
+        uploadedByRole: role,
+        fileName: file.name,
+        fileType: file.type,
+        url,
+        storagePath,
+        category,
+        timestamp: new Date().toISOString(),
+        visibility,
+        isVisibleToClient: visibility === 'client'
+      };
+
+      await addDoc(collection(db, 'attachments'), attachment);
+      
+      const ticket = tickets.find(t => t.id === ticketId);
+      await logActivity({
+        ticketId,
+        clientId: ticket?.clientId || '',
+        type: 'attachment_uploaded',
+        description: `File uploaded: ${file.name} (${category.replace('_', ' ')})`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'attachments');
+    }
+  };
+
+  const deleteAttachment = async (id: string) => {
+    try {
+      const attachment = attachments.find(a => a.id === id);
+      if (!attachment) return;
+
+      const storageRef = ref(storage, attachment.storagePath);
+      await deleteObject(storageRef);
+      await deleteDoc(doc(db, 'attachments', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `attachments/${id}`);
+    }
+  };
+
+  const updateAttachmentVisibility = async (id: string, visibility: Attachment['visibility']) => {
+    try {
+      await updateDoc(doc(db, 'attachments', id), { 
+        visibility,
+        isVisibleToClient: visibility === 'client'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `attachments/${id}`);
+    }
+  };
+
+  const addMaterialUsed = async (material: Omit<MaterialUsed, 'id' | 'timestamp' | 'addedById'>) => {
+    try {
+      const newMaterial = {
+        ...material,
+        timestamp: new Date().toISOString(),
+        addedById: currentUser.id,
+        total: material.unitCost * material.quantity
+      };
+      await addDoc(collection(db, 'materialsUsed'), newMaterial);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'materialsUsed');
+    }
+  };
+
+  const updateMaterialUsed = async (id: string, updates: Partial<MaterialUsed>) => {
+    try {
+      const material = materialsUsed.find(m => m.id === id);
+      if (!material) return;
+      
+      const newUpdates = { ...updates };
+      if (updates.quantity !== undefined || updates.unitCost !== undefined) {
+        const q = updates.quantity !== undefined ? updates.quantity : material.quantity;
+        const c = updates.unitCost !== undefined ? updates.unitCost : material.unitCost;
+        if (c !== undefined) {
+          newUpdates.total = q * c;
+        }
+      }
+      
+      await updateDoc(doc(db, 'materialsUsed', id), newUpdates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `materialsUsed/${id}`);
+    }
+  };
+
+  const deleteMaterialUsed = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'materialsUsed', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `materialsUsed/${id}`);
+    }
+  };
+
+  const saveServiceSummary = async (summary: Omit<ServiceSummary, 'id' | 'completionTimestamp' | 'completedById' | 'completedByName' | 'timestamp'>) => {
+    try {
+      const newSummary = {
+        ...summary,
+        completionTimestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        completedById: currentUser.id,
+        completedByName: currentUser.fullName,
+      };
+      await addDoc(collection(db, 'serviceSummaries'), newSummary);
+      
+      const ticket = tickets.find(t => t.id === summary.ticketId);
+      if (ticket && ticket.status !== 'completed') {
+        await updateTicket(summary.ticketId, { status: 'completed' });
+      }
+      
+      await logActivity({
+        ticketId: summary.ticketId,
+        clientId: ticket?.clientId || '',
+        type: 'service_completed',
+        description: 'Service summary and closeout completed',
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'serviceSummaries');
+    }
+  };
+
+  const updateServiceSummary = async (id: string, updates: Partial<ServiceSummary>) => {
+    try {
+      await updateDoc(doc(db, 'serviceSummaries', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `serviceSummaries/${id}`);
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages, activities,
+      attachments, materialsUsed, serviceSummaries,
+      uploadAttachment, deleteAttachment, updateAttachmentVisibility,
+      addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
+      saveServiceSummary, updateServiceSummary,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

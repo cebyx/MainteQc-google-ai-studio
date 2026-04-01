@@ -177,6 +177,58 @@
         "metadata": { "type": "object" }
       },
       "required": ["ticketId", "clientId", "type", "description", "actorId", "actorName", "actorRole", "timestamp"]
+    },
+    "Attachment": {
+      "title": "Attachment",
+      "description": "A file or photo attached to a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "uploadedById": { "type": "string" },
+        "uploadedByRole": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "url": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "category": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["internal", "client"] }
+      },
+      "required": ["ticketId", "uploadedById", "uploadedByRole", "fileName", "fileType", "url", "storagePath", "category", "timestamp", "visibility"]
+    },
+    "MaterialUsed": {
+      "title": "Material Used",
+      "description": "A part or material used on a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "description": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "total": { "type": "number" },
+        "notes": { "type": "string" },
+        "addedById": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["ticketId", "description", "quantity", "addedById", "timestamp"]
+    },
+    "ServiceSummary": {
+      "title": "Service Summary",
+      "description": "A structured completion record for a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "completedById": { "type": "string" },
+        "completedByName": { "type": "string" },
+        "completionTimestamp": { "type": "string" },
+        "summary": { "type": "string" },
+        "workPerformed": { "type": "string" },
+        "followUpNeeded": { "type": "boolean" },
+        "recommendedNextSteps": { "type": "string" },
+        "clientVisibleNotes": { "type": "string" },
+        "internalNotes": { "type": "string" }
+      },
+      "required": ["ticketId", "completedById", "completedByName", "completionTimestamp", "summary", "workPerformed", "followUpNeeded", "recommendedNextSteps", "clientVisibleNotes"]
     }
   },
   "firestore": {
@@ -211,6 +263,18 @@
     "/activities/{activityId}": {
       "schema": { "$ref": "#/entities/ActivityEvent" },
       "description": "Stores activity events"
+    },
+    "/attachments/{attachmentId}": {
+      "schema": { "$ref": "#/entities/Attachment" },
+      "description": "Stores ticket attachments"
+    },
+    "/materialsUsed/{materialId}": {
+      "schema": { "$ref": "#/entities/MaterialUsed" },
+      "description": "Stores materials used on tickets"
+    },
+    "/serviceSummaries/{summaryId}": {
+      "schema": { "$ref": "#/entities/ServiceSummary" },
+      "description": "Stores service summaries"
     }
   }
 }

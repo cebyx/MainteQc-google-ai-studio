@@ -17,10 +17,19 @@ import {
   AlertTriangle,
   Plus,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Paperclip,
+  Package,
+  Camera,
+  ClipboardCheck,
+  FileText
 } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 import { STATUS_LABELS } from '../constants';
+import { AttachmentsPanel } from './AttachmentsPanel';
+import { PartsUsedPanel } from './PartsUsedPanel';
+import { CloseoutPanel } from './CloseoutPanel';
+import { PhotoGallery } from './PhotoGallery';
 
 interface TicketDetailProps {
   ticket: Ticket;
@@ -100,6 +109,17 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
         </div>
         <p className="text-gray-600 leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">{ticket.description}</p>
       </section>
+
+      <div className="grid grid-cols-1 gap-8">
+        <PhotoGallery ticketId={ticket.id} />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <AttachmentsPanel ticketId={ticket.id} />
+          <PartsUsedPanel ticketId={ticket.id} />
+        </div>
+
+        <CloseoutPanel ticket={ticket} />
+      </div>
 
       {isPending && (
         <section className="rounded-2xl bg-amber-50 p-6 border border-amber-200 shadow-sm">
@@ -480,6 +500,17 @@ const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; 
         </div>
       </section>
 
+      <div className="grid grid-cols-1 gap-8">
+        <PhotoGallery ticketId={ticket.id} />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <AttachmentsPanel ticketId={ticket.id} />
+          <PartsUsedPanel ticketId={ticket.id} />
+        </div>
+
+        <CloseoutPanel ticket={ticket} />
+      </div>
+
       <div className="space-y-4">
         <div className="rounded-xl border border-gray-100 p-4 bg-white shadow-sm">
           <h5 className="text-sm font-bold text-gray-900 mb-2">Technician Field Notes</h5>
@@ -518,6 +549,17 @@ const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
         <h3 className="text-xl font-bold text-gray-900 mb-2">{ticket.title}</h3>
         <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
       </section>
+
+      <div className="grid grid-cols-1 gap-8">
+        <PhotoGallery ticketId={ticket.id} allowUpload={false} />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <AttachmentsPanel ticketId={ticket.id} allowUpload={false} />
+          <PartsUsedPanel ticketId={ticket.id} allowEdit={false} />
+        </div>
+
+        <CloseoutPanel ticket={ticket} allowEdit={false} />
+      </div>
 
       {ticket.completionNotes && (
         <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">

@@ -152,3 +152,57 @@ export interface ActivityEvent {
   timestamp: string;
   metadata?: Record<string, any>;
 }
+
+export type AttachmentCategory = 
+  | 'before_photo' 
+  | 'after_photo' 
+  | 'work_photo' 
+  | 'invoice_attachment' 
+  | 'quote_attachment' 
+  | 'service_document' 
+  | 'client_upload' 
+  | 'technician_upload';
+
+export interface Attachment {
+  id: string;
+  ticketId: string;
+  uploadedById: string;
+  uploadedByRole: UserRole;
+  fileName: string;
+  fileType: string;
+  url: string;
+  storagePath: string;
+  category: AttachmentCategory;
+  timestamp: string;
+  visibility: 'internal' | 'client';
+  isVisibleToClient: boolean; // Added for easier filtering
+}
+
+export interface MaterialUsed {
+  id: string;
+  ticketId: string;
+  description: string;
+  quantity: number;
+  unitCost: number;
+  total?: number; // Made optional for creation
+  notes?: string;
+  addedById: string;
+  timestamp: string;
+}
+
+export interface ServiceSummary {
+  id: string;
+  ticketId: string;
+  completedById: string;
+  completedByName: string;
+  completionTimestamp: string;
+  timestamp: string; // Added for consistency with other records
+  summary: string;
+  workPerformed: string;
+  followUpNeeded: boolean;
+  recommendedNextSteps: string;
+  clientVisibleNotes: string;
+  internalNotes?: string;
+  materialsUsed?: MaterialUsed[];
+  isSharedWithClient: boolean; // Added for easier filtering
+}
