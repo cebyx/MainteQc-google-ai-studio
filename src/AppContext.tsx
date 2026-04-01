@@ -93,6 +93,10 @@ interface AppContextType {
   deleteMaterialUsed: (id: string) => Promise<void>;
   saveServiceSummary: (summary: Omit<ServiceSummary, 'id' | 'completionTimestamp' | 'completedById' | 'completedByName'>) => Promise<void>;
   updateServiceSummary: (id: string, updates: Partial<ServiceSummary>) => Promise<void>;
+  sendQuoteReminder: (quoteId: string) => Promise<void>;
+  sendInvoiceReminder: (invoiceId: string) => Promise<void>;
+  markDocumentAsViewed: (type: 'quote' | 'invoice' | 'summary' | 'attachment', id: string) => Promise<void>;
+  markDocumentAsExported: (type: 'quote' | 'invoice' | 'summary' | 'attachment', id: string) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -973,6 +977,93 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const sendQuoteReminder = async (quoteId: string) => {
+    try {
+      const quote = quotes.find(q => q.id === quoteId);
+      if (!quote) return;
+
+      const reminderCount = (quote.reminderCount || 0) + 1;
+      await updateDoc(doc(db, 'quotes', quoteId), {
+        reminderSentAt: new Date().toISOString(),
+        reminderCount
+      });
+
+      await createSystemMessage(
+        quote.ticketId,
+        quote.clientId,
+        'CLIENT',
+        `Friendly reminder: Your quote for ticket #${quote.ticketId.slice(-6)} is awaiting your review.`
+      );
+
+      await logActivity({
+        ticketId: quote.ticketId,
+        clientId: quote.clientId,
+        type: 'quote_reminder_sent',
+        description: `Quote reminder #${reminderCount} sent to client.`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `quotes/${quoteId}`);
+    }
+  };
+
+  const sendInvoiceReminder = async (invoiceId: string) => {
+    try {
+      const invoice = invoices.find(i => i.id === invoiceId);
+      if (!invoice) return;
+
+      const reminderCount = (invoice.reminderCount || 0) + 1;
+      await updateDoc(doc(db, 'invoices', invoiceId), {
+        reminderSentAt: new Date().toISOString(),
+        reminderCount,
+        collectionsStatus: 'active'
+      });
+
+      await createSystemMessage(
+        invoice.ticketId,
+        invoice.clientId,
+        'CLIENT',
+        `Friendly reminder: Your invoice for ticket #${invoice.ticketId.slice(-6)} is currently ${invoice.status}.`
+      );
+
+      await logActivity({
+        ticketId: invoice.ticketId,
+        clientId: invoice.clientId,
+        type: 'invoice_reminder_sent',
+        description: `Invoice reminder #${reminderCount} sent to client.`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `invoices/${invoiceId}`);
+    }
+  };
+
+  const markDocumentAsViewed = async (type: 'quote' | 'invoice' | 'summary' | 'attachment', id: string) => {
+    try {
+      const collectionName = type === 'quote' ? 'quotes' : type === 'invoice' ? 'invoices' : type === 'summary' ? 'serviceSummaries' : 'attachments';
+      await updateDoc(doc(db, collectionName, id), {
+        viewedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${type}/${id}`);
+    }
+  };
+
+  const markDocumentAsExported = async (type: 'quote' | 'invoice' | 'summary' | 'attachment', id: string) => {
+    try {
+      const collectionName = type === 'quote' ? 'quotes' : type === 'invoice' ? 'invoices' : type === 'summary' ? 'serviceSummaries' : 'attachments';
+      await updateDoc(doc(db, collectionName, id), {
+        exportedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${type}/${id}`);
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
@@ -981,6 +1072,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
       saveServiceSummary, updateServiceSummary,
+      sendQuoteReminder, sendInvoiceReminder, markDocumentAsViewed, markDocumentAsExported,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

@@ -108,6 +108,10 @@ export interface Quote {
   sentDate?: string;
   acceptedDate?: string;
   declinedDate?: string;
+  reminderSentAt?: string;
+  reminderCount?: number;
+  viewedAt?: string;
+  exportedAt?: string;
 }
 
 export interface Invoice {
@@ -125,6 +129,12 @@ export interface Invoice {
   paidDate?: string;
   paymentMethod?: string;
   notes: string;
+  reminderSentAt?: string;
+  reminderCount?: number;
+  viewedAt?: string;
+  exportedAt?: string;
+  collectionsStatus?: 'none' | 'active' | 'resolved';
+  agingBucket?: 'current' | '1-30' | '31-60' | '61-90' | '90+';
 }
 
 export interface Message {
@@ -176,6 +186,8 @@ export interface Attachment {
   timestamp: string;
   visibility: 'internal' | 'client';
   isVisibleToClient: boolean; // Added for easier filtering
+  viewedAt?: string;
+  exportedAt?: string;
 }
 
 export interface MaterialUsed {
@@ -205,4 +217,7 @@ export interface ServiceSummary {
   internalNotes?: string;
   materialsUsed?: MaterialUsed[];
   isSharedWithClient: boolean; // Added for easier filtering
+  viewedAt?: string;
+  exportedAt?: string;
+  sharedWithClientAt?: string;
 }

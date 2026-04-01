@@ -16,7 +16,9 @@ import {
   Bell,
   LogOut,
   Search,
-  Plus
+  Plus,
+  BarChart3,
+  Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -52,6 +54,8 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'dispatch', label: 'Dispatch', icon: ClipboardList },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'records', label: 'Records Hub', icon: Zap },
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'properties', label: 'Properties', icon: MapPin },
     { id: 'technicians', label: 'Technicians', icon: HardHat },
@@ -63,6 +67,7 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
   const techNav = [
     { id: 'today', label: 'Today', icon: Calendar },
     { id: 'my-jobs', label: 'My Jobs', icon: ClipboardList },
+    { id: 'records', label: 'Records Hub', icon: Zap },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'profile', label: 'Profile', icon: User },
   ];
@@ -72,7 +77,7 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'request', label: 'Request Service', icon: Plus },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'history', label: 'History', icon: ClipboardList },
-    { id: 'documents', label: 'Documents', icon: FileText },
+    { id: 'documents', label: 'Records Hub', icon: Zap },
     { id: 'billing', label: 'Billing', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'profile', label: 'Profile', icon: User },

@@ -18,6 +18,7 @@ import { AppointmentsListView } from './components/AppointmentsListView';
 import { ServiceHistoryView } from './components/ServiceHistoryView';
 import { ProfileView } from './components/ProfileView';
 import { DocumentsCenter } from './components/DocumentsCenter';
+import { ReportsDashboard } from './components/ReportsDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Shield, Wrench, User, LogIn, LogOut } from 'lucide-react';
 
@@ -70,6 +71,8 @@ const AppContent: React.FC = () => {
         case 'technicians': return <TechniciansListView />;
         case 'messages': return <MessagesView />;
         case 'billing': return <BillingView />;
+        case 'reports': return <ReportsDashboard />;
+        case 'records': return <DocumentsCenter />;
         case 'brand': return <BrandSettingsView />;
         default: return <AdminDashboard setActiveTab={setActiveTab} />;
       }
@@ -80,6 +83,7 @@ const AppContent: React.FC = () => {
         case 'today': return <TechnicianDashboard />;
         case 'my-jobs': return <MyJobsView />;
         case 'messages': return <MessagesView />;
+        case 'records': return <DocumentsCenter />;
         case 'profile': return <ProfileView />;
         default: return <TechnicianDashboard />;
       }
@@ -101,6 +105,7 @@ const AppContent: React.FC = () => {
 
     return null;
   };
+
 
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab}>

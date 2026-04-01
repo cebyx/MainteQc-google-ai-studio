@@ -11,25 +11,29 @@ import {
   Users,
   HardHat,
   FileText,
-  Plus
+  Plus,
+  BarChart3,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { ReminderCenter } from './CollectionsQueue';
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: any; color: string; trend?: string }> = ({ title, value, icon: Icon, color, trend }) => (
-  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+  <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md group">
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{title}</p>
-        <h3 className="mt-1 text-2xl font-bold text-gray-900">{value}</h3>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{title}</p>
+        <h3 className="mt-1 text-2xl font-black text-gray-900 tracking-tight">{value}</h3>
         {trend && (
-          <p className="mt-1 flex items-center text-xs text-emerald-600">
+          <p className="mt-1 flex items-center text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
             <TrendingUp className="mr-1 h-3 w-3" />
-            {trend} from last week
+            {trend}
           </p>
         )}
       </div>
-      <div className={cn("flex h-12 w-12 items-center justify-center rounded-xl", color)}>
+      <div className={cn("flex h-12 w-12 items-center justify-center rounded-2xl group-hover:scale-110 transition-transform", color)}>
         <Icon className="h-6 w-6 text-white" />
       </div>
     </div>
@@ -37,23 +41,25 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: any; col
 );
 
 export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
-  const { tickets, clients, technicians, invoices } = useApp();
+  const { tickets, clients, technicians, invoices, quotes } = useApp();
 
   const pendingCount = tickets.filter(t => t.status === 'pending_review').length;
   const activeCount = tickets.filter(t => ['in_progress', 'on_the_way', 'arrived'].includes(t.status)).length;
   const todayStr = new Date().toISOString().split('T')[0];
   const todayJobs = tickets.filter(t => t.scheduledDate === todayStr).length;
   const unpaidRevenue = invoices.filter(i => i.status !== 'paid').reduce((acc, inv) => acc + inv.total, 0);
+  const pendingQuotesCount = quotes.filter(q => q.status === 'sent').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Top Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           title="Pending Review" 
           value={pendingCount} 
           icon={AlertCircle} 
           color="bg-amber-500" 
-          trend="+2"
+          trend="+2 New"
         />
         <StatCard 
           title="Active Jobs" 
@@ -75,75 +81,109 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent Requests */}
-        <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-6 py-4">
-            <h3 className="font-bold text-gray-900">Recent Service Requests</h3>
-            <button onClick={() => setActiveTab('dispatch')} className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1">
-              View All <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="divide-y divide-gray-100 overflow-x-auto">
-            {tickets.slice(0, 5).map((ticket) => (
-              <div key={ticket.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <UrgencyBadge urgency={ticket.urgency} />
-                    <StatusBadge status={ticket.status} />
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-900 truncate">{ticket.title}</h4>
-                  <p className="text-xs text-gray-500 truncate">{ticket.clientName} • {ticket.propertyNickname}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-medium text-gray-900">{formatDate(ticket.createdAt)}</div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-tighter">{ticket.category}</div>
-                </div>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        {/* Left Column: Operational Intelligence */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Business Automation Alerts */}
+          <ReminderCenter />
+
+          {/* Recent Service Requests */}
+          <div className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-50 bg-gray-50/30 px-6 py-5">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 tracking-tight">Recent Service Requests</h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Latest Activity</p>
               </div>
-            ))}
+              <button 
+                onClick={() => setActiveTab('dispatch')} 
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                View All <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50 overflow-x-auto">
+              {tickets.slice(0, 5).map((ticket) => (
+                <div key={ticket.id} className="flex items-center gap-4 px-6 py-5 hover:bg-gray-50/50 transition-colors group cursor-pointer">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <UrgencyBadge urgency={ticket.urgency} />
+                      <StatusBadge status={ticket.status} />
+                    </div>
+                    <h4 className="text-sm font-bold text-gray-900 truncate group-hover:text-blue-600 transition-colors">{ticket.title}</h4>
+                    <p className="text-xs text-gray-500 font-medium truncate">{ticket.clientName} • {ticket.propertyNickname}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs font-bold text-gray-900">{formatDate(ticket.createdAt)}</div>
+                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{ticket.category}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Quick Actions & Stats */}
-        <div className="space-y-6">
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
+        {/* Right Column: Back Office & Team */}
+        <div className="space-y-8">
+          {/* Back Office Quick Actions */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-indigo-50 rounded-xl">
+                <ShieldCheck className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 tracking-tight uppercase">Back Office</h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Admin Control</p>
+              </div>
+            </div>
+            
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setActiveTab('dispatch')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
-                <Plus className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-gray-700">New Ticket</span>
+              <button onClick={() => setActiveTab('reports')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-indigo-50 hover:border-indigo-100 group">
+                <BarChart3 className="h-6 w-6 text-indigo-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Reports</span>
               </button>
-              <button onClick={() => setActiveTab('clients')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
-                <Users className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-gray-700">Add Client</span>
+              <button onClick={() => setActiveTab('billing')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-emerald-50 hover:border-emerald-100 group">
+                <FileText className="h-6 w-6 text-emerald-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Billing</span>
               </button>
-              <button onClick={() => setActiveTab('dispatch')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
-                <HardHat className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-gray-700">Dispatch</span>
+              <button onClick={() => setActiveTab('records')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-blue-50 hover:border-blue-100 group">
+                <Zap className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Records</span>
               </button>
-              <button onClick={() => setActiveTab('billing')} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:bg-blue-50 hover:border-blue-200 group">
-                <FileText className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-gray-700">Invoicing</span>
+              <button onClick={() => setActiveTab('clients')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-amber-50 hover:border-amber-100 group">
+                <Users className="h-6 w-6 text-amber-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Clients</span>
               </button>
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-4">Team Availability</h3>
+          {/* Team Availability */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-blue-50 rounded-xl">
+                <HardHat className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 tracking-tight uppercase">Team Status</h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Real-time Availability</p>
+              </div>
+            </div>
+            
             <div className="space-y-4">
               {technicians.map(tech => (
-                <div key={tech.id} className="flex items-center justify-between">
+                <div key={tech.id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer group">
                   <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">
+                    <div className="h-10 w-10 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-700 font-black text-sm group-hover:scale-110 transition-transform">
                       {tech.fullName.charAt(0)}
                     </div>
                     <div>
-                      <div className="text-sm font-semibold">{tech.fullName}</div>
-                      <div className="text-[10px] text-gray-500 uppercase">{tech.specialties.join(', ')}</div>
+                      <div className="text-sm font-bold text-gray-900">{tech.fullName}</div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider truncate max-w-[120px]">
+                        {tech.specialties[0]}
+                      </div>
                     </div>
                   </div>
                   <div className={cn(
-                    "h-2 w-2 rounded-full",
+                    "h-2.5 w-2.5 rounded-full ring-4 ring-white shadow-sm",
                     tech.status === 'available' ? "bg-emerald-500" : tech.status === 'busy' ? "bg-amber-500" : "bg-gray-300"
                   )}></div>
                 </div>
@@ -155,3 +195,4 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
     </div>
   );
 };
+
