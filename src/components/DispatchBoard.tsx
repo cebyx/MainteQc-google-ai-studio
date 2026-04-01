@@ -12,9 +12,18 @@ export const DispatchBoard: React.FC = () => {
   const [view, setView] = useState<'board' | 'list'>('board');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
+  const [searchTerm, setSearchTerm] = useState('');
+
   const columns: JobStatus[] = ['pending_review', 'approved', 'scheduled', 'in_progress', 'waiting_on_parts'];
 
-  const getTicketsByStatus = (status: JobStatus) => tickets.filter(t => t.status === status);
+  const filteredTickets = tickets.filter(t => 
+    t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.propertyNickname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (t.assignedTechnicianName && t.assignedTechnicianName.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const getTicketsByStatus = (status: JobStatus) => filteredTickets.filter(t => t.status === status);
 
   return (
     <div className="space-y-6">
@@ -37,7 +46,13 @@ export const DispatchBoard: React.FC = () => {
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search tickets..." className="h-10 rounded-xl border-gray-200 pl-9 text-sm focus:ring-blue-500" />
+            <input 
+              type="text" 
+              placeholder="Search tickets..." 
+              className="h-10 rounded-xl border-gray-200 pl-9 text-sm focus:ring-blue-500"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
           </div>
           <button className="flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-bold text-gray-700 hover:bg-gray-50">
             <Filter className="h-4 w-4" />
@@ -118,7 +133,7 @@ export const DispatchBoard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {tickets.map(ticket => (
+              {filteredTickets.map(ticket => (
                 <tr key={ticket.id} onClick={() => setSelectedTicket(ticket)} className="hover:bg-gray-50 cursor-pointer transition-colors">
                   <td className="px-6 py-4">
                     <div className="font-bold text-gray-900">{ticket.title}</div>

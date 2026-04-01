@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { 
   Plus, 
@@ -12,9 +12,12 @@ import {
 } from 'lucide-react';
 import { StatusBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
+import { TicketDetail } from './TicketDetail';
+import { Ticket } from '../types';
 
 export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
   const { tickets, currentUser, properties } = useApp();
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // Filter records for this client
   const myTickets = tickets.filter(t => t.clientId === currentUser.id);
@@ -55,7 +58,11 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
           <div className="space-y-3">
             {activeJobs.length > 0 ? (
               activeJobs.map(job => (
-                <div key={job.id} className="group relative rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:shadow-md active:scale-[0.99]">
+                <div 
+                  key={job.id} 
+                  onClick={() => setSelectedTicket(job)}
+                  className="group relative rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:shadow-md active:scale-[0.99] cursor-pointer"
+                >
                   <div className="mb-3 flex items-center justify-between">
                     <StatusBadge status={job.status} />
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">{job.category}</div>
@@ -122,6 +129,13 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
           </div>
         </div>
       </div>
+
+      {selectedTicket && (
+        <TicketDetail 
+          ticket={selectedTicket} 
+          onClose={() => setSelectedTicket(null)} 
+        />
+      )}
     </div>
   );
 };

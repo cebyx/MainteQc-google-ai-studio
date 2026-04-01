@@ -160,6 +160,23 @@
         "paymentMethod": { "type": "string" }
       },
       "required": ["ticketId", "clientId", "propertyId", "status", "subtotal", "tax", "total", "lineItems", "notes", "dueDate", "createdAt"]
+    },
+    "ActivityEvent": {
+      "title": "Activity Event",
+      "description": "An event in the timeline of a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actorRole": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["ticketId", "clientId", "type", "description", "actorId", "actorName", "actorRole", "timestamp"]
     }
   },
   "firestore": {
@@ -190,6 +207,10 @@
     "/invoices/{invoiceId}": {
       "schema": { "$ref": "#/entities/Invoice" },
       "description": "Stores invoices"
+    },
+    "/activities/{activityId}": {
+      "schema": { "$ref": "#/entities/ActivityEvent" },
+      "description": "Stores activity events"
     }
   }
 }

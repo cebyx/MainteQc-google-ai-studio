@@ -169,6 +169,20 @@ service cloud.firestore {
              (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() < 100));
     }
 
+    function isValidActivity() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'clientId', 'type', 'description', 'actorId', 'actorName', 'actorRole', 'timestamp']) &&
+             data.ticketId is string && data.ticketId.size() > 0 && data.ticketId.size() < 100 &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.type is string && data.type.size() > 0 && data.type.size() < 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
+             data.actorId is string && data.actorId.size() > 0 && data.actorId.size() < 100 &&
+             data.actorName is string && data.actorName.size() > 0 && data.actorName.size() < 100 &&
+             data.actorRole in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             (!('metadata' in data) || data.metadata is map);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -256,6 +270,16 @@ service cloud.firestore {
         isAdmin() || 
         (isOwner(resource.data.recipientId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']))
       );
+      allow delete: if isAdmin();
+    }
+    match /activities/{activityId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isTechnician() || 
+        isOwner(resource.data.clientId)
+      );
+      allow create: if isAuthenticated() && isValidActivity();
+      allow update: if false;
       allow delete: if isAdmin();
     }
   }

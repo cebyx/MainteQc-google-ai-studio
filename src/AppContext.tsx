@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message } from './types';
+import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, ActivityEvent } from './types';
 import { auth, db, googleProvider } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
@@ -55,6 +55,7 @@ interface AppContextType {
   quotes: Quote[];
   invoices: Invoice[];
   messages: Message[];
+  activities: ActivityEvent[];
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
   addMessage: (message: Omit<Message, 'id' | 'timestamp' | 'read'>) => void;
@@ -64,6 +65,16 @@ interface AppContextType {
   createInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => Promise<void>;
   updateInvoiceStatus: (id: string, status: Invoice['status'], paymentMethod?: string) => Promise<void>;
   updateCurrentUserProfile: (updates: any) => Promise<void>;
+  createClient: (client: Omit<Client, 'id'>) => Promise<void>;
+  updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
+  createTechnician: (tech: Omit<Technician, 'id'>) => Promise<void>;
+  updateTechnician: (id: string, updates: Partial<Technician>) => Promise<void>;
+  createProperty: (property: Omit<Property, 'id'>) => Promise<void>;
+  updateProperty: (id: string, updates: Partial<Property>) => Promise<void>;
+  logActivity: (activity: Omit<ActivityEvent, 'id' | 'timestamp'>) => Promise<void>;
+  createNotification: (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => Promise<void>;
+  rescheduleTicket: (id: string, date: string, time: string) => Promise<void>;
+  assignTechnician: (id: string, techId: string, techName: string) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -85,6 +96,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [activities, setActivities] = useState<ActivityEvent[]>([]);
 
   // Test connection on boot
   useEffect(() => {
@@ -228,6 +240,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages'));
 
+    // Listen to Activities
+    const unsubActivities = onSnapshot(collection(db, 'activities'), (snapshot) => {
+      const allActivities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityEvent));
+      
+      if (role === 'ADMIN' || role === 'TECHNICIAN') {
+        setActivities(allActivities);
+      } else {
+        setActivities(allActivities.filter(a => a.clientId === currentUser.id));
+      }
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'activities'));
+
     return () => {
       unsubUsers();
       unsubBrand();
@@ -236,6 +259,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubTickets();
       unsubProperties();
       unsubMessages();
+      unsubActivities();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -258,6 +282,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateTicket = async (id: string, updates: Partial<Ticket>) => {
     try {
       await updateDoc(doc(db, 'tickets', id), updates);
+      const ticket = tickets.find(t => t.id === id);
+      if (ticket && updates.status && updates.status !== ticket.status) {
+        await logActivity({
+          ticketId: id,
+          clientId: ticket.clientId,
+          type: 'status_changed',
+          description: `Ticket status changed from ${ticket.status} to ${updates.status}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+        if (role === 'ADMIN' && updates.status === 'approved') {
+          await createNotification(id, ticket.clientId, 'CLIENT', `Your service request #${id.slice(-6)} has been approved.`);
+        }
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
     }
@@ -269,7 +308,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...ticket,
         createdAt: new Date().toISOString(),
       };
-      await addDoc(collection(db, 'tickets'), newTicket);
+      const docRef = await addDoc(collection(db, 'tickets'), newTicket);
+      await logActivity({
+        ticketId: docRef.id,
+        clientId: ticket.clientId,
+        type: 'request_created',
+        description: `Service request submitted: ${ticket.title}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+      if (role === 'CLIENT') {
+        // Notify admin (assuming admin is a role we can't easily target by ID here, so maybe we skip or we just log activity)
+        // We don't have a specific admin ID, so we skip direct message notification to admin for now, or we could broadcast.
+        // Activity log is enough for admin to see.
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'tickets');
     }
@@ -298,6 +351,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const createQuote = async (quote: Omit<Quote, 'id' | 'createdAt'>) => {
     try {
+      // Prevent duplicate quotes for the same ticket
+      const existingQuote = quotes.find(q => q.ticketId === quote.ticketId && q.status !== 'declined');
+      if (existingQuote) {
+        throw new Error('A quote already exists for this ticket.');
+      }
+
       const newQuote = {
         ...quote,
         createdAt: new Date().toISOString(),
@@ -306,6 +365,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await addDoc(collection(db, 'quotes'), newQuote);
       if (quote.status === 'sent') {
         updateTicket(quote.ticketId, { quoteStatus: 'sent' });
+        await logActivity({
+          ticketId: quote.ticketId,
+          clientId: quote.clientId,
+          type: 'quote_sent',
+          description: `Quote sent for $${quote.total.toFixed(2)}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+        await createNotification(quote.ticketId, quote.clientId, 'CLIENT', `A new quote for $${quote.total.toFixed(2)} has been sent for your review.`);
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'quotes');
@@ -324,6 +393,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await updateDoc(doc(db, 'quotes', id), updates);
       if (quote) {
         updateTicket(quote.ticketId, { quoteStatus: status });
+        await logActivity({
+          ticketId: quote.ticketId,
+          clientId: quote.clientId,
+          type: status === 'accepted' ? 'quote_accepted' : (status === 'declined' ? 'quote_declined' : 'status_changed'),
+          description: `Quote ${status}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `quotes/${id}`);
@@ -332,6 +410,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const createInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
     try {
+      // Prevent duplicate invoices for the same ticket
+      const existingInvoice = invoices.find(i => i.id === invoice.ticketId); // Wait, invoice.id is usually ticketId in some models, but here it's a separate doc.
+      // Let's check by ticketId
+      const existingInvoiceByTicket = invoices.find(i => i.ticketId === invoice.ticketId);
+      if (existingInvoiceByTicket) {
+        throw new Error('An invoice already exists for this ticket.');
+      }
+
       const newInvoice = {
         ...invoice,
         createdAt: new Date().toISOString(),
@@ -339,6 +425,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await addDoc(collection(db, 'invoices'), newInvoice);
       if (invoice.status === 'unpaid') {
         updateTicket(invoice.ticketId, { invoiceStatus: 'unpaid' });
+        await logActivity({
+          ticketId: invoice.ticketId,
+          clientId: invoice.clientId,
+          type: 'invoice_created',
+          description: `Invoice created for $${invoice.total.toFixed(2)}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+        await createNotification(invoice.ticketId, invoice.clientId, 'CLIENT', `A new invoice for $${invoice.total.toFixed(2)} is now available.`);
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'invoices');
@@ -356,6 +452,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await updateDoc(doc(db, 'invoices', id), updates);
       if (invoice) {
         updateTicket(invoice.ticketId, { invoiceStatus: status });
+        if (status === 'paid') {
+          await logActivity({
+            ticketId: invoice.ticketId,
+            clientId: invoice.clientId,
+            type: 'invoice_paid',
+            description: `Invoice paid via ${paymentMethod || 'unknown method'}`,
+            actorId: currentUser.id,
+            actorName: currentUser.fullName,
+            actorRole: role,
+          });
+        }
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `invoices/${id}`);
@@ -377,11 +484,146 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const createClient = async (client: Omit<Client, 'id'>) => {
+    try {
+      const newClient = {
+        ...client,
+        uid: `client_${Date.now()}`, // Placeholder UID for manually created clients
+        role: 'CLIENT',
+        email: client.email || '',
+      };
+      await addDoc(collection(db, 'users'), newClient);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'users');
+    }
+  };
+
+  const updateClient = async (id: string, updates: Partial<Client>) => {
+    try {
+      await updateDoc(doc(db, 'users', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${id}`);
+    }
+  };
+
+  const createTechnician = async (tech: Omit<Technician, 'id'>) => {
+    try {
+      const newTech = {
+        ...tech,
+        uid: `tech_${Date.now()}`, // Placeholder UID for manually created technicians
+        role: 'TECHNICIAN',
+        email: tech.email || '',
+      };
+      await addDoc(collection(db, 'users'), newTech);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'users');
+    }
+  };
+
+  const updateTechnician = async (id: string, updates: Partial<Technician>) => {
+    try {
+      await updateDoc(doc(db, 'users', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${id}`);
+    }
+  };
+
+  const createProperty = async (property: Omit<Property, 'id'>) => {
+    try {
+      await addDoc(collection(db, 'properties'), property);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'properties');
+    }
+  };
+
+  const updateProperty = async (id: string, updates: Partial<Property>) => {
+    try {
+      await updateDoc(doc(db, 'properties', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `properties/${id}`);
+    }
+  };
+
+  const logActivity = async (activity: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
+    try {
+      const newActivity = {
+        ...activity,
+        timestamp: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'activities'), newActivity);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'activities');
+    }
+  };
+
+  const createNotification = async (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => {
+    try {
+      const newMessage = {
+        ticketId,
+        senderId: currentUser.id,
+        senderRole: role,
+        recipientId,
+        recipientRole,
+        text,
+        timestamp: new Date().toISOString(),
+        read: false,
+      };
+      await addDoc(collection(db, 'messages'), newMessage);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'messages');
+    }
+  };
+
+  const rescheduleTicket = async (id: string, date: string, time: string) => {
+    try {
+      await updateDoc(doc(db, 'tickets', id), { scheduledDate: date, scheduledTime: time });
+      const ticket = tickets.find(t => t.id === id);
+      if (ticket) {
+        await logActivity({
+          ticketId: id,
+          clientId: ticket.clientId,
+          type: 'appointment_scheduled',
+          description: `Appointment rescheduled to ${date} at ${time}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+        await createNotification(id, ticket.clientId, 'CLIENT', `Your appointment for ticket #${id.slice(-6)} has been rescheduled to ${date} at ${time}.`);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
+    }
+  };
+
+  const assignTechnician = async (id: string, techId: string, techName: string) => {
+    try {
+      await updateDoc(doc(db, 'tickets', id), { assignedTechnicianId: techId, assignedTechnicianName: techName });
+      const ticket = tickets.find(t => t.id === id);
+      if (ticket) {
+        await logActivity({
+          ticketId: id,
+          clientId: ticket.clientId,
+          type: 'technician_assigned',
+          description: `Technician ${techName} assigned to ticket`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+        await createNotification(id, techId, 'TECHNICIAN', `You have been assigned to ticket #${id.slice(-6)}.`);
+        await createNotification(id, ticket.clientId, 'CLIENT', `Technician ${techName} has been assigned to your ticket.`);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
-      clients, technicians, tickets, properties, quotes, invoices, messages,
-      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, updateCurrentUserProfile, login, logout, isAuthReady
+      clients, technicians, tickets, properties, quotes, invoices, messages, activities,
+      updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuoteStatus, createInvoice, updateInvoiceStatus, updateCurrentUserProfile,
+      createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, rescheduleTicket, assignTechnician,
+      login, logout, isAuthReady
     }}>
       {children}
     </AppContext.Provider>

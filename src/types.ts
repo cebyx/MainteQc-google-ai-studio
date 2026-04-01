@@ -138,3 +138,16 @@ export interface Message {
   timestamp: string;
   read: boolean;
 }
+
+export interface ActivityEvent {
+  id: string;
+  ticketId: string;
+  clientId: string;
+  type: string;
+  description: string;
+  actorId: string;
+  actorName: string;
+  actorRole: UserRole;
+  timestamp: string;
+  metadata?: any;
+}

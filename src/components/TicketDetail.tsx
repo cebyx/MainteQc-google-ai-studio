@@ -227,15 +227,42 @@ const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
 };
 
 export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) => {
-  const { role, updateTicket } = useApp();
+  const { role, updateTicket, rescheduleTicket, assignTechnician, activities } = useApp();
   const [editedTicket, setEditedTicket] = useState<Partial<Ticket>>({});
+
+  const ticketActivities = activities
+    .filter(a => a.ticketId === ticket.id)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const handleStatusChange = (newStatus: JobStatus) => {
     updateTicket(ticket.id, { status: newStatus });
   };
 
-  const handleSave = () => {
-    updateTicket(ticket.id, editedTicket);
+  const handleSave = async () => {
+    const updates = { ...editedTicket };
+    
+    if (updates.scheduledDate !== undefined || updates.scheduledTime !== undefined) {
+      const newDate = updates.scheduledDate ?? ticket.scheduledDate ?? '';
+      const newTime = updates.scheduledTime ?? ticket.scheduledTime ?? '';
+      if (newDate || newTime) {
+        await rescheduleTicket(ticket.id, newDate, newTime);
+      }
+      delete updates.scheduledDate;
+      delete updates.scheduledTime;
+    }
+
+    if (updates.assignedTechnicianId !== undefined) {
+      const newTechId = updates.assignedTechnicianId;
+      const newTechName = updates.assignedTechnicianName ?? '';
+      await assignTechnician(ticket.id, newTechId, newTechName);
+      delete updates.assignedTechnicianId;
+      delete updates.assignedTechnicianName;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await updateTicket(ticket.id, updates);
+    }
+    
     setEditedTicket({});
   };
 
@@ -348,37 +375,28 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) =
 
               {/* Timeline / Status */}
               <div className="rounded-2xl border border-gray-100 p-5">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Status Timeline</h4>
-                <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <div className="relative flex flex-col items-center">
-                      <div className="h-3 w-3 rounded-full bg-emerald-500"></div>
-                      <div className="h-full w-0.5 bg-gray-100"></div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">Request Received</div>
-                      <div className="text-[10px] text-gray-400">{formatDate(ticket.createdAt)}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="relative flex flex-col items-center">
-                      <div className={cn("h-3 w-3 rounded-full", ticket.scheduledDate ? "bg-emerald-500" : "bg-gray-200")}></div>
-                      <div className="h-full w-0.5 bg-gray-100"></div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">Scheduled</div>
-                      <div className="text-[10px] text-gray-400">{ticket.scheduledDate ? formatDate(ticket.scheduledDate) : 'Pending'}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="relative flex flex-col items-center">
-                      <div className={cn("h-3 w-3 rounded-full", ticket.status === 'completed' ? "bg-emerald-500" : "bg-gray-200")}></div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">Completed</div>
-                      <div className="text-[10px] text-gray-400">{ticket.status === 'completed' ? 'Done' : 'In Progress'}</div>
-                    </div>
-                  </div>
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Activity Timeline</h4>
+                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                  {ticketActivities.length > 0 ? (
+                    ticketActivities.map((activity, index) => (
+                      <div key={activity.id} className="flex gap-3">
+                        <div className="relative flex flex-col items-center">
+                          <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+                          {index !== ticketActivities.length - 1 && (
+                            <div className="h-full w-0.5 bg-gray-100"></div>
+                          )}
+                        </div>
+                        <div className="pb-4">
+                          <div className="text-xs font-bold text-gray-900">{activity.description}</div>
+                          <div className="text-[10px] text-gray-500 mt-0.5">
+                            {formatDate(activity.timestamp)} • {activity.actorName} ({activity.actorRole})
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-gray-500 italic">No activity recorded yet.</div>
+                  )}
                 </div>
               </div>
             </div>

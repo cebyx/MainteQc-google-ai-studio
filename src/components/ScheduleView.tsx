@@ -3,10 +3,13 @@ import { useApp } from '../AppContext';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StatusBadge } from './Badges';
+import { TicketDetail } from './TicketDetail';
+import { Ticket } from '../types';
 
 export const ScheduleView: React.FC = () => {
   const { tickets, technicians } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   const scheduledTickets = tickets.filter(t => t.scheduledDate);
 
@@ -89,7 +92,11 @@ export const ScheduleView: React.FC = () => {
                     </div>
                     <div className="flex-1 p-2 flex gap-2 overflow-x-auto">
                       {hourTickets.map(ticket => (
-                        <div key={ticket.id} className="min-w-[300px] max-w-[400px] shrink-0 rounded-xl border border-blue-100 bg-blue-50/50 p-4 transition-all hover:bg-blue-50 hover:shadow-md cursor-pointer">
+                        <div 
+                          key={ticket.id} 
+                          onClick={() => setSelectedTicket(ticket)}
+                          className="min-w-[300px] max-w-[400px] shrink-0 rounded-xl border border-blue-100 bg-blue-50/50 p-4 transition-all hover:bg-blue-50 hover:shadow-md cursor-pointer"
+                        >
                           <div className="flex items-start justify-between mb-2">
                             <h4 className="font-bold text-blue-900 truncate pr-2">{ticket.title}</h4>
                             <StatusBadge status={ticket.status} />
@@ -125,6 +132,13 @@ export const ScheduleView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {selectedTicket && (
+        <TicketDetail 
+          ticket={selectedTicket} 
+          onClose={() => setSelectedTicket(null)} 
+        />
+      )}
     </div>
   );
 };
