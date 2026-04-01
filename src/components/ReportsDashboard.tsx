@@ -12,7 +12,10 @@ import {
 import { cn } from '../lib/utils';
 
 export const ReportsDashboard: React.FC = () => {
-  const { tickets, quotes, invoices, technicians, clients } = useApp();
+  const { 
+    tickets, quotes, invoices, technicians, clients, 
+    maintenancePlans, approvalRecords, paymentRecords 
+  } = useApp();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
 
   // Financial Metrics
@@ -24,16 +27,56 @@ export const ReportsDashboard: React.FC = () => {
     const totalRevenue = paidInvoices.reduce((sum, i) => sum + i.total, 0);
     const outstandingRevenue = unpaidInvoices.reduce((sum, i) => sum + i.total, 0);
     const overdueRevenue = overdueInvoices.reduce((sum, i) => sum + i.total, 0);
+    
+    const totalPayments = paymentRecords.reduce((sum, p) => sum + p.amount, 0);
 
     return {
       totalRevenue,
       outstandingRevenue,
       overdueRevenue,
+      totalPayments,
       paidCount: paidInvoices.length,
       unpaidCount: unpaidInvoices.length,
       overdueCount: overdueInvoices.length
     };
-  }, [invoices]);
+  }, [invoices, paymentRecords]);
+
+  // Maintenance Plan Metrics
+  const maintenanceStats = useMemo(() => {
+    const activePlans = maintenancePlans.filter(p => p.status === 'active');
+    const totalMonthlyValue = activePlans.reduce((sum, p) => {
+      // Estimate monthly value based on frequency
+      const freq = p.frequency;
+      const cost = p.pricePerVisit || 0;
+      if (freq === 'monthly') return sum + cost;
+      if (freq === 'quarterly') return sum + (cost / 3);
+      if (freq === 'semi-annual') return sum + (cost / 6);
+      if (freq === 'annual') return sum + (cost / 12);
+      return sum;
+    }, 0);
+
+    return {
+      activeCount: activePlans.length,
+      monthlyRecurringRevenue: totalMonthlyValue,
+      totalPlans: maintenancePlans.length
+    };
+  }, [maintenancePlans]);
+
+  // Approval Metrics
+  const approvalStats = useMemo(() => {
+    const totalApprovals = approvalRecords.length;
+    const approvedCount = approvalRecords.filter(a => a.status === 'approved').length;
+    const declinedCount = approvalRecords.filter(a => a.status === 'declined').length;
+    
+    const approvalRate = totalApprovals > 0 ? (approvedCount / totalApprovals) * 100 : 0;
+
+    return {
+      total: totalApprovals,
+      approved: approvedCount,
+      declined: declinedCount,
+      rate: approvalRate
+    };
+  }, [approvalRecords]);
 
   // Quote Conversion
   const quoteStats = useMemo(() => {
@@ -127,28 +170,28 @@ export const ReportsDashboard: React.FC = () => {
           subtitle="Paid invoices to date"
         />
         <StatCard 
+          title="Recurring Revenue" 
+          value={`$${maintenanceStats.monthlyRecurringRevenue.toLocaleString()}/mo`} 
+          icon={<Clock className="h-5 w-5 text-blue-600" />}
+          trend={`${maintenanceStats.activeCount} active plans`}
+          trendUp={true}
+          subtitle="Estimated MRR"
+        />
+        <StatCard 
+          title="Approval Rate" 
+          value={`${approvalStats.rate.toFixed(1)}%`} 
+          icon={<CheckCircle2 className="h-5 w-5 text-purple-600" />}
+          trend={`${approvalStats.approved} approved`}
+          trendUp={true}
+          subtitle="Quote approvals"
+        />
+        <StatCard 
           title="Outstanding" 
           value={`$${financialStats.outstandingRevenue.toLocaleString()}`} 
-          icon={<Clock className="h-5 w-5 text-amber-600" />}
+          icon={<AlertCircle className="h-5 w-5 text-amber-600" />}
           trend={`${financialStats.unpaidCount} pending`}
           trendUp={false}
           subtitle="Unpaid invoices"
-        />
-        <StatCard 
-          title="Quote Conversion" 
-          value={`${quoteStats.conversionRate.toFixed(1)}%`} 
-          icon={<Target className="h-5 w-5 text-blue-600" />}
-          trend={`${quoteStats.accepted} accepted`}
-          trendUp={true}
-          subtitle="Sent vs Accepted"
-        />
-        <StatCard 
-          title="Active Backlog" 
-          value={tickets.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length.toString()} 
-          icon={<Briefcase className="h-5 w-5 text-purple-600" />}
-          trend="8 urgent"
-          trendUp={false}
-          subtitle="Open work orders"
         />
       </div>
 

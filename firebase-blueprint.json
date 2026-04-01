@@ -229,6 +229,77 @@
         "internalNotes": { "type": "string" }
       },
       "required": ["ticketId", "completedById", "completedByName", "completionTimestamp", "summary", "workPerformed", "followUpNeeded", "recommendedNextSteps", "clientVisibleNotes"]
+    },
+    "ClientAccount": {
+      "title": "Client Account",
+      "description": "A client organization or account",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "suspended"] }
+      },
+      "required": ["name", "ownerId", "createdAt", "status"]
+    },
+    "ClientMember": {
+      "title": "Client Member",
+      "description": "A user within a client account",
+      "type": "object",
+      "properties": {
+        "accountId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "member", "viewer"] },
+        "addedAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "invited", "deactivated"] }
+      },
+      "required": ["accountId", "clientId", "role", "addedAt", "status"]
+    },
+    "MaintenancePlan": {
+      "title": "Maintenance Plan",
+      "description": "A recurring service plan",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["monthly", "quarterly", "semi-annual", "annual", "custom"] },
+        "status": { "type": "string", "enum": ["active", "paused", "cancelled"] },
+        "nextDueDate": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["clientId", "propertyId", "title", "description", "category", "frequency", "status", "nextDueDate", "createdAt"]
+    },
+    "PaymentRecord": {
+      "title": "Payment Record",
+      "description": "A record of a payment made for an invoice",
+      "type": "object",
+      "properties": {
+        "invoiceId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed", "refunded"] },
+        "method": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "recordedBy": { "type": "string" }
+      },
+      "required": ["invoiceId", "clientId", "amount", "status", "method", "timestamp", "recordedBy"]
+    },
+    "ApprovalRecord": {
+      "title": "Approval Record",
+      "description": "A record of a quote approval",
+      "type": "object",
+      "properties": {
+        "quoteId": { "type": "string" },
+        "ticketId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "status": { "type": "string", "enum": ["approved", "declined"] },
+        "timestamp": { "type": "string" },
+        "signatureName": { "type": "string" }
+      },
+      "required": ["quoteId", "ticketId", "clientId", "status", "timestamp", "signatureName"]
     }
   },
   "firestore": {
@@ -275,6 +346,26 @@
     "/serviceSummaries/{summaryId}": {
       "schema": { "$ref": "#/entities/ServiceSummary" },
       "description": "Stores service summaries"
+    },
+    "/clientAccounts/{accountId}": {
+      "schema": { "$ref": "#/entities/ClientAccount" },
+      "description": "Stores client accounts"
+    },
+    "/clientMembers/{memberId}": {
+      "schema": { "$ref": "#/entities/ClientMember" },
+      "description": "Stores client account members"
+    },
+    "/maintenancePlans/{planId}": {
+      "schema": { "$ref": "#/entities/MaintenancePlan" },
+      "description": "Stores recurring maintenance plans"
+    },
+    "/paymentRecords/{paymentId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Stores payment records"
+    },
+    "/approvalRecords/{approvalId}": {
+      "schema": { "$ref": "#/entities/ApprovalRecord" },
+      "description": "Stores quote approval records"
     }
   }
 }

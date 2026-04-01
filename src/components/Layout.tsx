@@ -18,7 +18,9 @@ import {
   Search,
   Plus,
   BarChart3,
-  Zap
+  Zap,
+  Wrench,
+  Clock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -54,6 +56,8 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'dispatch', label: 'Dispatch', icon: ClipboardList },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
+    { id: 'maintenance', label: 'Maintenance Plans', icon: Wrench },
+    { id: 'recurring', label: 'Recurring Queue', icon: Clock },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'records', label: 'Records Hub', icon: Zap },
     { id: 'clients', label: 'Clients', icon: Users },
@@ -77,6 +81,7 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'request', label: 'Request Service', icon: Plus },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'history', label: 'History', icon: ClipboardList },
+    { id: 'team', label: 'My Team', icon: Users },
     { id: 'documents', label: 'Records Hub', icon: Zap },
     { id: 'billing', label: 'Billing', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageSquare },

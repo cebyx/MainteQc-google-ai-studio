@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, ActivityEvent, Attachment, MaterialUsed, ServiceSummary } from './types';
+import { 
+  UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, 
+  ActivityEvent, Attachment, MaterialUsed, ServiceSummary, ClientAccount, ClientMember, 
+  MaintenancePlan, RecurringGenerationLog, ApprovalRecord, PaymentRecord 
+} from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
@@ -57,6 +61,14 @@ interface AppContextType {
   invoices: Invoice[];
   messages: Message[];
   activities: ActivityEvent[];
+  clientAccounts: ClientAccount[];
+  clientAccount: ClientAccount | null;
+  clientMembers: ClientMember[];
+  maintenancePlans: MaintenancePlan[];
+  paymentRecords: PaymentRecord[];
+  approvalRecords: ApprovalRecord[];
+  recurringGenerationLog: RecurringGenerationLog[];
+  loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
   addMessage: (message: Omit<Message, 'id' | 'timestamp' | 'read'>) => void;
@@ -97,6 +109,18 @@ interface AppContextType {
   sendInvoiceReminder: (invoiceId: string) => Promise<void>;
   markDocumentAsViewed: (type: 'quote' | 'invoice' | 'summary' | 'attachment', id: string) => Promise<void>;
   markDocumentAsExported: (type: 'quote' | 'invoice' | 'summary' | 'attachment', id: string) => Promise<void>;
+  createClientAccount: (account: Omit<ClientAccount, 'id' | 'createdAt'>) => Promise<void>;
+  updateClientAccount: (id: string, updates: Partial<ClientAccount>) => Promise<void>;
+  createClientMember: (member: Omit<ClientMember, 'id' | 'addedAt'>) => Promise<void>;
+  updateClientMemberRole: (id: string, role: ClientMember['role']) => Promise<void>;
+  removeClientMember: (id: string) => Promise<void>;
+  createMaintenancePlan: (plan: Omit<MaintenancePlan, 'id' | 'createdAt'>) => Promise<void>;
+  updateMaintenancePlan: (id: string, updates: Partial<MaintenancePlan>) => Promise<void>;
+  deleteMaintenancePlan: (id: string) => Promise<void>;
+  recordPayment: (payment: Omit<PaymentRecord, 'id' | 'timestamp' | 'recordedBy'>) => Promise<void>;
+  listPaymentRecords: (invoiceId: string) => Promise<PaymentRecord[]>;
+  approveQuoteWithAuthorization: (quoteId: string, authorization: { signatureName: string; notes: string; status: 'approved' | 'declined' }) => Promise<void>;
+  generateRecurringTicket: (planId: string) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -122,6 +146,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [materialsUsed, setMaterialsUsed] = useState<MaterialUsed[]>([]);
   const [serviceSummaries, setServiceSummaries] = useState<ServiceSummary[]>([]);
+  const [clientAccounts, setClientAccounts] = useState<ClientAccount[]>([]);
+  const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
+  const [clientMembers, setClientMembers] = useState<ClientMember[]>([]);
+  const [maintenancePlans, setMaintenancePlans] = useState<MaintenancePlan[]>([]);
+  const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
+  const [approvalRecords, setApprovalRecords] = useState<ApprovalRecord[]>([]);
+  const [recurringGenerationLog, setRecurringGenerationLog] = useState<RecurringGenerationLog[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Test connection on boot
   useEffect(() => {
@@ -365,6 +397,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setServiceSummaries(allSummaries);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'serviceSummaries'));
 
+    // Listen to Client Accounts
+    let accountsQuery;
+    if (role === 'ADMIN') {
+      accountsQuery = collection(db, 'clientAccounts');
+    } else {
+      accountsQuery = query(collection(db, 'clientAccounts'), where('ownerId', '==', currentUser.id));
+    }
+    const unsubAccounts = onSnapshot(accountsQuery, (snapshot) => {
+      setClientAccounts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClientAccount)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'clientAccounts'));
+
+    // Listen to Client Members
+    let membersQuery;
+    if (role === 'ADMIN') {
+      membersQuery = collection(db, 'clientMembers');
+    } else {
+      // This is a bit tricky, but for now we'll listen to members of the account(s) the user is in
+      // For simplicity, we'll listen to all members where clientId matches
+      membersQuery = query(collection(db, 'clientMembers'), where('clientId', '==', currentUser.id));
+    }
+    const unsubMembers = onSnapshot(membersQuery, (snapshot) => {
+      setClientMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClientMember)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'clientMembers'));
+
+    // Listen to Maintenance Plans
+    let plansQuery;
+    if (role === 'ADMIN' || role === 'TECHNICIAN') {
+      plansQuery = collection(db, 'maintenancePlans');
+    } else {
+      plansQuery = query(collection(db, 'maintenancePlans'), where('clientId', '==', currentUser.id));
+    }
+    const unsubPlans = onSnapshot(plansQuery, (snapshot) => {
+      setMaintenancePlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MaintenancePlan)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'maintenancePlans'));
+
+    // Listen to Payment Records
+    let paymentsQuery;
+    if (role === 'ADMIN') {
+      paymentsQuery = collection(db, 'paymentRecords');
+    } else {
+      paymentsQuery = query(collection(db, 'paymentRecords'), where('clientId', '==', currentUser.id));
+    }
+    const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
+      setPaymentRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentRecord)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'paymentRecords'));
+
+    // Listen to Approval Records
+    let approvalsQuery;
+    if (role === 'ADMIN') {
+      approvalsQuery = collection(db, 'approvalRecords');
+    } else {
+      approvalsQuery = query(collection(db, 'approvalRecords'), where('clientId', '==', currentUser.id));
+    }
+    const unsubApprovals = onSnapshot(approvalsQuery, (snapshot) => {
+      setApprovalRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ApprovalRecord)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'approvalRecords'));
+
+    // Listen to Recurring Generation Log
+    let logQuery;
+    if (role === 'ADMIN') {
+      logQuery = collection(db, 'recurringGenerationLog');
+    } else {
+      logQuery = null;
+    }
+    const unsubLog = logQuery ? onSnapshot(logQuery, (snapshot) => {
+      setRecurringGenerationLog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RecurringGenerationLog)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'recurringGenerationLog')) : () => {};
+
+    setLoading(false);
+
     return () => {
       unsubUsers();
       unsubBrand();
@@ -377,8 +479,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubAttachments();
       unsubMaterials();
       unsubSummaries();
+      unsubAccounts();
+      unsubMembers();
+      unsubPlans();
+      unsubPayments();
+      unsubApprovals();
+      unsubLog();
     };
   }, [isAuthReady, currentUser, role]);
+
+  // Set clientAccount if the user is a client
+  useEffect(() => {
+    if (role === 'CLIENT' && currentUser?.accountId) {
+      const account = clientAccounts.find(a => a.id === currentUser.accountId);
+      setClientAccount(account || null);
+    } else if (role !== 'CLIENT') {
+      setClientAccount(null);
+    }
+  }, [clientAccounts, currentUser, role]);
+
+  // Automatic Recurring Ticket Generation Check (Admin only)
+  useEffect(() => {
+    if (role !== 'ADMIN' || !maintenancePlans.length) return;
+
+    const checkRecurringPlans = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const duePlans = maintenancePlans.filter(plan => 
+        plan.status === 'active' && 
+        plan.nextDueDate <= today
+      );
+
+      for (const plan of duePlans) {
+        // Check if we already generated a ticket for this plan today to avoid duplicates
+        const alreadyGenerated = recurringGenerationLog.some(log => 
+          log.planId === plan.id && 
+          log.generatedAt.startsWith(today)
+        );
+
+        if (!alreadyGenerated) {
+          console.log(`Automatically generating ticket for plan: ${plan.title}`);
+          await generateRecurringTicket(plan.id);
+        }
+      }
+    };
+
+    const interval = setInterval(checkRecurringPlans, 1000 * 60 * 60); // Check every hour
+    checkRecurringPlans(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [role, maintenancePlans, recurringGenerationLog]);
 
   const login = async () => {
     try {
@@ -1064,15 +1213,290 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const createClientAccount = async (account: Omit<ClientAccount, 'id' | 'createdAt'>) => {
+    try {
+      const newAccount = {
+        ...account,
+        createdAt: new Date().toISOString(),
+        status: 'active' as const
+      };
+      await addDoc(collection(db, 'clientAccounts'), newAccount);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'clientAccounts');
+    }
+  };
+
+  const updateClientAccount = async (id: string, updates: Partial<ClientAccount>) => {
+    try {
+      await updateDoc(doc(db, 'clientAccounts', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clientAccounts/${id}`);
+    }
+  };
+
+  const createClientMember = async (member: Omit<ClientMember, 'id' | 'addedAt'>) => {
+    try {
+      const newMember = {
+        ...member,
+        addedAt: new Date().toISOString(),
+        status: 'invited' as const
+      };
+      const memberRef = await addDoc(collection(db, 'clientMembers'), newMember);
+      
+      // Notify the invited user (if they already exist in the system)
+      // We can't easily find them by email here without a query, but we can try
+      const q = query(collection(db, 'users'), where('email', '==', member.clientId)); // Wait, clientId is usually uid.
+      // Actually, ClientMember.clientId is the UID of the user.
+      
+      await createNotification(
+        'system',
+        member.clientId,
+        'CLIENT',
+        `You have been invited to join the team for account #${member.accountId.slice(-6)}.`
+      );
+
+      await logActivity({
+        ticketId: 'system',
+        clientId: member.clientId,
+        type: 'team_member_invited',
+        description: `New team member invited to account: ${member.accountId}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'clientMembers');
+    }
+  };
+
+  const updateClientMemberRole = async (id: string, role: ClientMember['role']) => {
+    try {
+      await updateDoc(doc(db, 'clientMembers', id), { role });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clientMembers/${id}`);
+    }
+  };
+
+  const removeClientMember = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'clientMembers', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `clientMembers/${id}`);
+    }
+  };
+
+  const createMaintenancePlan = async (plan: Omit<MaintenancePlan, 'id' | 'createdAt'>) => {
+    try {
+      const newPlan = {
+        ...plan,
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'maintenancePlans'), newPlan);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'maintenancePlans');
+    }
+  };
+
+  const updateMaintenancePlan = async (id: string, updates: Partial<MaintenancePlan>) => {
+    try {
+      await updateDoc(doc(db, 'maintenancePlans', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `maintenancePlans/${id}`);
+    }
+  };
+
+  const deleteMaintenancePlan = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'maintenancePlans', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `maintenancePlans/${id}`);
+    }
+  };
+
+  const recordPayment = async (payment: Omit<PaymentRecord, 'id' | 'timestamp' | 'recordedBy'>) => {
+    try {
+      // Mock Stripe Integration
+      // In a real app, we would call Stripe API here
+      console.log(`Simulating Stripe payment for ${payment.amount} ${payment.currency}...`);
+      const isSuccessful = Math.random() > 0.05; // 95% success rate simulation
+
+      if (!isSuccessful) {
+        throw new Error('Payment processing failed. Please check your card details and try again.');
+      }
+
+      const newPayment = {
+        ...payment,
+        timestamp: new Date().toISOString(),
+        recordedBy: currentUser.id,
+        status: 'completed' as const,
+        transactionId: `stripe_${Math.random().toString(36).substring(7)}`
+      };
+      const paymentRef = await addDoc(collection(db, 'paymentRecords'), newPayment);
+      
+      const invoice = invoices.find(i => i.id === payment.invoiceId);
+      if (invoice) {
+        const paymentIds = [...(invoice.paymentIds || []), paymentRef.id];
+        // We need to fetch the actual payment records to calculate the total paid
+        // For now, we'll use the local state which might be slightly behind but usually okay
+        const totalPaid = paymentIds.reduce((sum, pid) => {
+          const p = paymentRecords.find(pr => pr.id === pid);
+          return sum + (p?.amount || 0);
+        }, payment.amount);
+
+        const status = totalPaid >= invoice.total ? 'paid' : 'unpaid';
+        await updateDoc(doc(db, 'invoices', invoice.id), { 
+          paymentIds, 
+          status,
+          paidDate: status === 'paid' ? new Date().toISOString() : invoice.paidDate
+        });
+
+        await logActivity({
+          ticketId: invoice.ticketId,
+          clientId: invoice.clientId,
+          type: 'payment_recorded',
+          description: `Payment of ${payment.amount} ${payment.currency} recorded for invoice #${invoice.id.slice(-6)}`,
+          actorId: currentUser.id,
+          actorName: currentUser.fullName,
+          actorRole: role,
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'paymentRecords');
+    }
+  };
+
+  const listPaymentRecords = async (invoiceId: string) => {
+    try {
+      const q = query(collection(db, 'paymentRecords'), where('invoiceId', '==', invoiceId));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentRecord));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'paymentRecords');
+      return [];
+    }
+  };
+
+  const approveQuoteWithAuthorization = async (quoteId: string, authorization: { signatureName: string; notes: string; status: 'approved' | 'declined' }) => {
+    try {
+      const quote = quotes.find(q => q.id === quoteId);
+      if (!quote) return;
+
+      const approval: Omit<ApprovalRecord, 'id'> = {
+        quoteId,
+        ticketId: quote.ticketId,
+        clientId: quote.clientId,
+        clientName: currentUser.fullName,
+        status: authorization.status,
+        timestamp: new Date().toISOString(),
+        notes: authorization.notes,
+        signatureName: authorization.signatureName
+      };
+
+      const approvalRef = await addDoc(collection(db, 'approvalRecords'), approval);
+      
+      const newStatus = authorization.status === 'approved' ? 'accepted' : 'declined';
+      await updateDoc(doc(db, 'quotes', quoteId), { 
+        status: newStatus, 
+        acceptedDate: authorization.status === 'approved' ? new Date().toISOString() : undefined,
+        approvalId: approvalRef.id
+      });
+
+      if (authorization.status === 'approved') {
+        await updateTicket(quote.ticketId, { status: 'approved' });
+      }
+
+      await logActivity({
+        ticketId: quote.ticketId,
+        clientId: quote.clientId,
+        type: authorization.status === 'approved' ? 'quote_approved' : 'quote_declined',
+        description: `Quote #${quoteId.slice(-6)} ${authorization.status} by client with signature: ${authorization.signatureName}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'approvalRecords');
+    }
+  };
+
+  const generateRecurringTicket = async (planId: string) => {
+    try {
+      const plan = maintenancePlans.find(p => p.id === planId);
+      if (!plan) return;
+
+      const ticketData: Omit<Ticket, 'id' | 'createdAt'> = {
+        title: `Recurring Maintenance: ${plan.title}`,
+        description: plan.description,
+        category: plan.category,
+        urgency: 'medium',
+        status: 'pending_review',
+        clientId: plan.clientId,
+        clientName: clients.find(c => c.id === plan.clientId)?.fullName || 'Unknown',
+        propertyId: plan.propertyId,
+        propertyNickname: properties.find(p => p.id === plan.propertyId)?.nickname || 'Unknown',
+        serviceAddress: properties.find(p => p.id === plan.propertyId)?.address || '',
+        preferredDate: plan.nextDueDate,
+        preferredTime: plan.preferredTimeWindow || '09:00',
+        contactPreference: 'email',
+        adminNotes: `Generated from maintenance plan: ${plan.id}`,
+        technicianNotes: '',
+        completionNotes: '',
+        createdByEmail: 'system@mainteqc.com'
+      };
+
+      const ticketRef = await addDoc(collection(db, 'tickets'), {
+        ...ticketData,
+        createdAt: new Date().toISOString()
+      });
+
+      // Update plan next due date
+      let nextDue = new Date(plan.nextDueDate);
+      if (plan.frequency === 'monthly') nextDue.setMonth(nextDue.getMonth() + 1);
+      else if (plan.frequency === 'quarterly') nextDue.setMonth(nextDue.getMonth() + 3);
+      else if (plan.frequency === 'semi-annual') nextDue.setMonth(nextDue.getMonth() + 6);
+      else if (plan.frequency === 'annual') nextDue.setFullYear(nextDue.getFullYear() + 1);
+      else if (plan.frequency === 'custom' && plan.intervalMonths) nextDue.setMonth(nextDue.getMonth() + plan.intervalMonths);
+
+      await updateDoc(doc(db, 'maintenancePlans', planId), {
+        nextDueDate: nextDue.toISOString().split('T')[0],
+        lastGeneratedDate: new Date().toISOString()
+      });
+
+      await addDoc(collection(db, 'recurringGenerationLog'), {
+        planId,
+        ticketId: ticketRef.id,
+        generatedAt: new Date().toISOString(),
+        status: 'success'
+      });
+
+      await logActivity({
+        ticketId: ticketRef.id,
+        clientId: plan.clientId,
+        type: 'recurring_ticket_generated',
+        description: `Ticket generated automatically from maintenance plan: ${plan.title}`,
+        actorId: 'system',
+        actorName: 'MainteQc System',
+        actorRole: 'ADMIN',
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'recurringGenerationLog');
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages, activities,
       attachments, materialsUsed, serviceSummaries,
+      clientAccounts, clientAccount, clientMembers, maintenancePlans, paymentRecords, approvalRecords, recurringGenerationLog,
+      loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
       saveServiceSummary, updateServiceSummary,
       sendQuoteReminder, sendInvoiceReminder, markDocumentAsViewed, markDocumentAsExported,
+      createClientAccount, updateClientAccount, createClientMember, updateClientMemberRole, removeClientMember,
+      createMaintenancePlan, updateMaintenancePlan, deleteMaintenancePlan,
+      recordPayment, listPaymentRecords, approveQuoteWithAuthorization, generateRecurringTicket,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

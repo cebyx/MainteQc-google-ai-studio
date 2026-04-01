@@ -20,7 +20,10 @@ import { ProfileView } from './components/ProfileView';
 import { DocumentsCenter } from './components/DocumentsCenter';
 import { ReportsDashboard } from './components/ReportsDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Shield, Wrench, User, LogIn, LogOut } from 'lucide-react';
+import MaintenancePlansView from './components/maintenance/MaintenancePlansView';
+import RecurringWorkQueue from './components/maintenance/RecurringWorkQueue';
+import ClientTeamView from './components/clients/ClientTeamView';
+import { Shield, Wrench, User, LogIn, LogOut, Clock } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { role, currentUser, login, logout, isAuthReady } = useApp();
@@ -66,6 +69,8 @@ const AppContent: React.FC = () => {
         case 'dashboard': return <AdminDashboard setActiveTab={setActiveTab} />;
         case 'dispatch': return <DispatchBoard />;
         case 'schedule': return <ScheduleView />;
+        case 'maintenance': return <MaintenancePlansView />;
+        case 'recurring': return <RecurringWorkQueue />;
         case 'clients': return <ClientsListView />;
         case 'properties': return <PropertiesListView />;
         case 'technicians': return <TechniciansListView />;
@@ -95,6 +100,7 @@ const AppContent: React.FC = () => {
         case 'request': return <RequestForm onSuccess={() => setActiveTab('dashboard')} />;
         case 'appointments': return <AppointmentsListView setActiveTab={setActiveTab} />;
         case 'history': return <ServiceHistoryView />;
+        case 'team': return <ClientTeamView />;
         case 'documents': return <DocumentsCenter />;
         case 'billing': return <BillingView />;
         case 'messages': return <MessagesView />;

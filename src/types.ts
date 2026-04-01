@@ -36,6 +36,7 @@ export interface Client {
   notes: string;
   status: 'active' | 'inactive';
   preferredContactMethod: 'email' | 'phone' | 'text';
+  accountId?: string; // Link to ClientAccount
 }
 
 export interface Property {
@@ -112,6 +113,7 @@ export interface Quote {
   reminderCount?: number;
   viewedAt?: string;
   exportedAt?: string;
+  approvalId?: string; // Link to ApprovalRecord
 }
 
 export interface Invoice {
@@ -135,6 +137,7 @@ export interface Invoice {
   exportedAt?: string;
   collectionsStatus?: 'none' | 'active' | 'resolved';
   agingBucket?: 'current' | '1-30' | '31-60' | '61-90' | '90+';
+  paymentIds?: string[]; // Links to PaymentRecords
 }
 
 export interface Message {
@@ -220,4 +223,88 @@ export interface ServiceSummary {
   viewedAt?: string;
   exportedAt?: string;
   sharedWithClientAt?: string;
+}
+
+export interface ClientAccount {
+  id: string;
+  name: string;
+  ownerId: string; // Client ID of the owner
+  createdAt: string;
+  status: 'active' | 'suspended';
+  settings?: Record<string, any>;
+}
+
+export interface ClientMember {
+  id: string;
+  accountId: string;
+  clientId: string; // The user's client ID
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+  addedAt: string;
+  status: 'active' | 'invited' | 'deactivated';
+}
+
+export interface MaintenancePlan {
+  id: string;
+  clientId: string;
+  propertyId: string;
+  title: string;
+  description: string;
+  category: string;
+  frequency: 'monthly' | 'quarterly' | 'semi-annual' | 'annual' | 'custom';
+  intervalMonths?: number;
+  status: 'active' | 'paused' | 'cancelled';
+  nextDueDate: string;
+  lastGeneratedDate?: string;
+  assignedTechnicianId?: string;
+  preferredTimeWindow?: string;
+  pricePerVisit?: number;
+  notes: string;
+  createdAt: string;
+}
+
+export interface RecurringGenerationLog {
+  id: string;
+  planId: string;
+  ticketId: string;
+  generatedAt: string;
+  status: 'success' | 'failed';
+  error?: string;
+}
+
+export interface ApprovalRecord {
+  id: string;
+  quoteId: string;
+  ticketId: string;
+  clientId: string;
+  clientName: string;
+  status: 'approved' | 'declined';
+  timestamp: string;
+  notes: string;
+  ipAddress?: string;
+  userAgent?: string;
+  signatureName?: string; // Typed name as signature
+}
+
+export interface PaymentRecord {
+  id: string;
+  invoiceId: string;
+  clientId: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  method: 'credit_card' | 'bank_transfer' | 'check' | 'cash' | 'other';
+  transactionId?: string;
+  timestamp: string;
+  notes: string;
+  recordedBy: string; // User ID who recorded it
+}
+
+export interface AuthorizationRecord {
+  id: string;
+  ticketId: string;
+  clientId: string;
+  type: 'work_start' | 'completion_signoff';
+  timestamp: string;
+  signatureName: string;
+  notes: string;
 }
