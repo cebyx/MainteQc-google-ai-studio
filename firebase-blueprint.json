@@ -407,6 +407,144 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["ticketId", "technicianId", "clientId", "startTime", "endTime", "status", "proposedBy", "createdAt", "updatedAt"]
+    },
+    "Vendor": {
+      "title": "Vendor",
+      "description": "A supplier or service provider",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "contactName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "status", "createdAt"]
+    },
+    "VendorBill": {
+      "title": "Vendor Bill",
+      "description": "A bill from a vendor",
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "billNumber": { "type": "string" },
+        "ticketId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "paid", "overdue", "cancelled"] },
+        "total": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "billDate": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["vendorId", "vendorName", "status", "total", "dueDate", "billDate", "createdAt"]
+    },
+    "VendorPayment": {
+      "title": "Vendor Payment",
+      "description": "A payment made to a vendor",
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "billId": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "reference": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["vendorId", "billId", "amount", "method", "timestamp"]
+    },
+    "ExpenseRecord": {
+      "title": "Expense Record",
+      "description": "A general business expense",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "ticketId": { "type": "string" },
+        "technicianId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "reimbursed", "rejected"] },
+        "receiptUrl": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["category", "amount", "description", "date", "status", "createdAt"]
+    },
+    "TechnicianPayProfile": {
+      "title": "Technician Pay Profile",
+      "description": "Payroll settings for a technician",
+      "type": "object",
+      "properties": {
+        "technicianId": { "type": "string" },
+        "hourlyRate": { "type": "number" },
+        "travelRate": { "type": "number" },
+        "overtimeRate": { "type": "number" },
+        "payFrequency": { "type": "string", "enum": ["weekly", "bi-weekly", "monthly"] },
+        "taxStatus": { "type": "string" }
+      },
+      "required": ["technicianId", "hourlyRate"]
+    },
+    "TimesheetApproval": {
+      "title": "Timesheet Approval",
+      "description": "Approval record for a technician's work sessions",
+      "type": "object",
+      "properties": {
+        "technicianId": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "totalHours": { "type": "number" },
+        "totalPay": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "paid"] },
+        "approvedBy": { "type": "string" },
+        "approvedAt": { "type": "string" }
+      },
+      "required": ["technicianId", "startDate", "endDate", "totalHours", "totalPay", "status"]
+    },
+    "PayrollExportBatch": {
+      "title": "Payroll Export Batch",
+      "description": "A batch of payroll records for export",
+      "type": "object",
+      "properties": {
+        "batchName": { "type": "string" },
+        "periodStart": { "type": "string" },
+        "periodEnd": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "employeeCount": { "type": "integer" },
+        "status": { "type": "string", "enum": ["draft", "exported", "processed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["batchName", "periodStart", "periodEnd", "totalAmount", "employeeCount", "status", "createdAt"]
+    },
+    "TaxProfile": {
+      "title": "Tax Profile",
+      "description": "Tax settings for the business",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "rate": { "type": "number" },
+        "description": { "type": "string" },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["name", "rate"]
+    },
+    "FinancialActivity": {
+      "title": "Financial Activity",
+      "description": "A ledger entry for financial transactions",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["income", "expense", "payroll", "tax", "vendor_payment"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "relatedId": { "type": "string" },
+        "relatedType": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorName": { "type": "string" }
+      },
+      "required": ["type", "amount", "description", "timestamp", "actorId", "actorName"]
     }
   },
   "firestore": {
@@ -497,6 +635,42 @@
     "/appointmentRecords/{appointmentId}": {
       "schema": { "$ref": "#/entities/AppointmentRecord" },
       "description": "Stores appointment records"
+    },
+    "/vendors/{vendorId}": {
+      "schema": { "$ref": "#/entities/Vendor" },
+      "description": "Stores vendors"
+    },
+    "/vendorBills/{billId}": {
+      "schema": { "$ref": "#/entities/VendorBill" },
+      "description": "Stores vendor bills"
+    },
+    "/vendorPayments/{paymentId}": {
+      "schema": { "$ref": "#/entities/VendorPayment" },
+      "description": "Stores vendor payments"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/ExpenseRecord" },
+      "description": "Stores business expenses"
+    },
+    "/technicianPayProfiles/{profileId}": {
+      "schema": { "$ref": "#/entities/TechnicianPayProfile" },
+      "description": "Stores technician pay profiles"
+    },
+    "/timesheetApprovals/{approvalId}": {
+      "schema": { "$ref": "#/entities/TimesheetApproval" },
+      "description": "Stores timesheet approval records"
+    },
+    "/payrollBatches/{batchId}": {
+      "schema": { "$ref": "#/entities/PayrollExportBatch" },
+      "description": "Stores payroll export batches"
+    },
+    "/taxProfiles/{profileId}": {
+      "schema": { "$ref": "#/entities/TaxProfile" },
+      "description": "Stores tax profiles"
+    },
+    "/financialActivity/{activityId}": {
+      "schema": { "$ref": "#/entities/FinancialActivity" },
+      "description": "Stores financial activity ledger"
     }
   }
 }

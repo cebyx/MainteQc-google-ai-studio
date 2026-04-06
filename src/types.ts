@@ -72,6 +72,7 @@ export interface Technician {
   avatar?: string;
   rating?: number;
   completedJobs?: number;
+  role?: UserRole;
 }
 
 export interface TechnicianAvailabilityRule {
@@ -158,6 +159,7 @@ export interface Ticket {
   quoteStatus?: 'none' | 'draft' | 'sent' | 'accepted' | 'declined';
   invoiceStatus?: 'none' | 'draft' | 'sent' | 'unpaid' | 'paid' | 'overdue';
   authorizationId?: string; // Link to AuthorizationRecord
+  jobCosting?: JobCostSnapshot;
   createdAt: string;
   createdByEmail: string;
 }
@@ -195,6 +197,8 @@ export interface Invoice {
   subtotal: number;
   tax: number;
   total: number;
+  amountPaid: number;
+  balanceRemaining: number;
   dueDate: string;
   createdAt: string;
   paidDate?: string;
@@ -423,8 +427,8 @@ export interface WorkSession {
   id: string;
   ticketId: string;
   technicianId: string;
-  startedAt: string;
-  endedAt?: string;
+  startTime: string;
+  endTime?: string;
   sessionType: 'travel' | 'onsite' | 'pause';
   notes: string;
   durationMinutes?: number;
@@ -525,4 +529,149 @@ export interface PendingSyncAction {
   timestamp: string;
   status: 'pending' | 'failed';
   error?: string;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  category: string; // e.g. 'Parts', 'Fuel', 'Subcontractor'
+  status: 'active' | 'inactive';
+  notes: string;
+  createdAt: string;
+}
+
+export interface VendorBill {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  billNumber: string;
+  status: 'draft' | 'received' | 'approved' | 'partially_paid' | 'paid' | 'void';
+  lineItems: { description: string; quantity: number; rate: number; total: number; category: string }[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  amountPaid: number;
+  balanceRemaining: number;
+  dueDate: string;
+  billDate: string;
+  createdAt: string;
+  notes: string;
+  purchaseOrderId?: string; // Link to PartsRequest or similar
+  ticketId?: string; // If bill is job-specific
+}
+
+export interface VendorPayment {
+  id: string;
+  billId: string;
+  vendorId: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: 'check' | 'ach' | 'credit_card' | 'cash' | 'other';
+  reference: string;
+  notes: string;
+  recordedBy: string;
+  recordedByName: string;
+  timestamp: string;
+}
+
+export interface ExpenseRecord {
+  id: string;
+  category: 'fuel' | 'vehicle' | 'tools' | 'office' | 'software' | 'payroll_adj' | 'subcontractor' | 'misc';
+  amount: number;
+  tax: number;
+  total: number;
+  date: string;
+  description: string;
+  vendorId?: string;
+  ticketId?: string;
+  propertyId?: string;
+  technicianId?: string;
+  notes: string;
+  paymentSource: string;
+  isRecurring: boolean;
+  receiptUrl?: string;
+  status: 'pending' | 'approved' | 'reimbursed' | 'void';
+  createdAt: string;
+}
+
+export interface TechnicianPayProfile {
+  id: string;
+  technicianId: string;
+  hourlyRate: number;
+  travelRate: number;
+  overtimeRate?: number;
+  payPeriod: 'weekly' | 'bi-weekly' | 'monthly';
+  payFrequency: 'weekly' | 'bi-weekly' | 'monthly';
+  taxId?: string;
+  status: 'active' | 'inactive';
+}
+
+export interface TimesheetApproval {
+  id: string;
+  technicianId: string;
+  technicianName: string;
+  startDate: string;
+  endDate: string;
+  totalRegularHours: number;
+  totalTravelHours: number;
+  totalOvertimeHours: number;
+  totalPay: number;
+  status: 'pending' | 'approved' | 'rejected' | 'paid';
+  approvedBy?: string;
+  approvedAt?: string;
+  notes: string;
+  workSessionIds: string[];
+}
+
+export interface PayrollExportBatch {
+  id: string;
+  batchName: string;
+  periodStart: string;
+  periodEnd: string;
+  totalAmount: number;
+  technicianCount: number;
+  employeeCount: number;
+  status: 'draft' | 'exported' | 'paid';
+  createdAt: string;
+  exportedAt?: string;
+  notes: string;
+}
+
+export interface TaxProfile {
+  id: string;
+  name: string;
+  rate: number; // percentage e.g. 8.5
+  description: string;
+  isDefault: boolean;
+  status: 'active' | 'inactive';
+}
+
+export interface FinancialActivity {
+  id: string;
+  type: 'invoice_issued' | 'payment_received' | 'bill_received' | 'bill_paid' | 'expense_recorded' | 'stock_purchase' | 'timesheet_approved' | 'payroll_processed' | 'adjustment';
+  amount: number;
+  description: string;
+  referenceId: string; // ID of the related invoice, bill, etc.
+  referenceType: 'invoice' | 'bill' | 'payment' | 'expense' | 'timesheet' | 'payroll';
+  timestamp: string;
+  actorId: string;
+  actorName: string;
+}
+
+export interface JobCostSnapshot {
+  id: string;
+  ticketId: string;
+  revenue: number;
+  laborCost: number;
+  materialCost: number;
+  expenseCost: number;
+  totalCost: number;
+  grossMargin: number;
+  profit: number;
+  marginPercentage: number;
+  margin: number;
+  lastUpdated: string;
 }

@@ -27,6 +27,12 @@ import { AdminInventoryView } from './components/admin/AdminInventoryView';
 import { PartsRequestsQueue } from './components/admin/PartsRequestsQueue';
 import { StockMovementsView } from './components/admin/StockMovementsView';
 import { ReplenishmentCenter } from './components/admin/ReplenishmentCenter';
+import AccountingDashboard from './components/AccountingDashboard';
+import AccountsReceivableView from './components/AccountsReceivableView';
+import AccountsPayableView from './components/AccountsPayableView';
+import ExpensesView from './components/ExpensesView';
+import PayrollView from './components/PayrollView';
+import FinancialReportsView from './components/FinancialReportsView';
 import MaintenancePlansView from './components/maintenance/MaintenancePlansView';
 import RecurringWorkQueue from './components/maintenance/RecurringWorkQueue';
 import ClientTeamView from './components/clients/ClientTeamView';
@@ -119,6 +125,12 @@ const AppContent: React.FC = () => {
         case 'reports': return <ReportsDashboard />;
         case 'records': return <DocumentsCenter />;
         case 'brand': return <BrandSettingsView />;
+        case 'accounting': return <AccountingDashboard />;
+        case 'ar': return <AccountsReceivableView />;
+        case 'ap': return <AccountsPayableView />;
+        case 'expenses': return <ExpensesView />;
+        case 'payroll': return <PayrollView />;
+        case 'fin-reports': return <FinancialReportsView />;
         default: return <AdminDashboard setActiveTab={setActiveTab} />;
       }
     }

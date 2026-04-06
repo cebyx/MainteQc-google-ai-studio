@@ -35,7 +35,7 @@ export const TimeTrackingView: React.FC = () => {
   const mySessions = workSessions.filter(s => s.technicianId === currentUser.id);
   const activeSession = mySessions.find(s => s.status === 'active');
 
-  const dailySessions = mySessions.filter(s => isSameDay(new Date(s.startedAt), selectedDate));
+  const dailySessions = mySessions.filter(s => isSameDay(new Date(s.startTime), selectedDate));
   const totalMinutesToday = dailySessions.reduce((acc, s) => acc + (s.durationMinutes || 0), 0);
 
   const weekStart = startOfWeek(new Date());
@@ -43,7 +43,7 @@ export const TimeTrackingView: React.FC = () => {
   const daysInWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
   const weeklyStats = daysInWeek.map(day => {
-    const daySessions = mySessions.filter(s => isSameDay(new Date(s.startedAt), day));
+    const daySessions = mySessions.filter(s => isSameDay(new Date(s.startTime), day));
     return {
       day: format(day, 'EEE'),
       date: format(day, 'MMM d'),
@@ -79,7 +79,7 @@ export const TimeTrackingView: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4" />
-                    Started {format(new Date(activeSession.startedAt), 'h:mm a')}
+                    Started {format(new Date(activeSession.startTime), 'h:mm a')}
                   </div>
                 </div>
               </div>
@@ -172,7 +172,7 @@ export const TimeTrackingView: React.FC = () => {
                         <div>
                           <div className="font-bold text-gray-900">{ticket?.title || 'Unknown Job'}</div>
                           <div className="text-xs text-gray-500">
-                            {format(new Date(session.startedAt), 'h:mm a')} - {session.endedAt ? format(new Date(session.endedAt), 'h:mm a') : 'Active'}
+                            {format(new Date(session.startTime), 'h:mm a')} - {session.endTime ? format(new Date(session.endTime), 'h:mm a') : 'Active'}
                           </div>
                         </div>
                       </div>

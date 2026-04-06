@@ -4,7 +4,9 @@ import {
   ActivityEvent, Attachment, MaterialUsed, ServiceSummary, ClientAccount, ClientMember, 
   MaintenancePlan, RecurringGenerationLog, ApprovalRecord, PaymentRecord, ClientInvitation, ReminderEvent, AuthorizationRecord,
   WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction, StockMovement,
-  TechnicianAvailabilityRule, BlockedSlot, AppointmentRecord, ScheduleConflict, DispatchSuggestion
+  TechnicianAvailabilityRule, BlockedSlot, AppointmentRecord, ScheduleConflict, DispatchSuggestion,
+  Vendor, VendorBill, VendorPayment, ExpenseRecord, TechnicianPayProfile, TimesheetApproval, 
+  PayrollExportBatch, TaxProfile, FinancialActivity, JobCostSnapshot
 } from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -84,6 +86,15 @@ interface AppContextType {
   technicianAvailabilityRules: TechnicianAvailabilityRule[];
   technicianBlockedSlots: BlockedSlot[];
   appointmentRecords: AppointmentRecord[];
+  vendors: Vendor[];
+  vendorBills: VendorBill[];
+  vendorPayments: VendorPayment[];
+  expenses: ExpenseRecord[];
+  technicianPayProfiles: TechnicianPayProfile[];
+  timesheetApprovals: TimesheetApproval[];
+  payrollBatches: PayrollExportBatch[];
+  taxProfiles: TaxProfile[];
+  financialActivities: FinancialActivity[];
   loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
@@ -179,6 +190,21 @@ interface AppContextType {
   updateTechnicianAvailabilityRule: (rule: TechnicianAvailabilityRule) => Promise<void>;
   getTechnicianCapacityForDay: (technicianId: string, date: string) => { totalMinutes: number; bookedMinutes: number; availableMinutes: number };
   
+  // Accounting Methods
+  createVendor: (vendor: Omit<Vendor, 'id' | 'createdAt'>) => Promise<void>;
+  updateVendor: (id: string, updates: Partial<Vendor>) => Promise<void>;
+  createVendorBill: (bill: Omit<VendorBill, 'id' | 'createdAt'>) => Promise<void>;
+  updateVendorBill: (id: string, updates: Partial<VendorBill>) => Promise<void>;
+  recordVendorPayment: (payment: Omit<VendorPayment, 'id' | 'timestamp'>) => Promise<void>;
+  createExpense: (expense: Omit<ExpenseRecord, 'id' | 'createdAt'>) => Promise<void>;
+  updateExpense: (id: string, updates: Partial<ExpenseRecord>) => Promise<void>;
+  approveTimesheet: (approval: Omit<TimesheetApproval, 'id'>) => Promise<void>;
+  createPayrollBatch: (batch: Omit<PayrollExportBatch, 'id' | 'createdAt'>) => Promise<void>;
+  createTaxProfile: (profile: Omit<TaxProfile, 'id'>) => Promise<void>;
+  updateTaxProfile: (id: string, updates: Partial<TaxProfile>) => Promise<void>;
+  logFinancialActivity: (activity: Omit<FinancialActivity, 'id' | 'timestamp'>) => Promise<void>;
+  calculateJobCosting: (ticketId: string) => JobCostSnapshot;
+
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -225,6 +251,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [technicianAvailabilityRules, setTechnicianAvailabilityRules] = useState<TechnicianAvailabilityRule[]>([]);
   const [technicianBlockedSlots, setTechnicianBlockedSlots] = useState<BlockedSlot[]>([]);
   const [appointmentRecords, setAppointmentRecords] = useState<AppointmentRecord[]>([]);
+  
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendorBills, setVendorBills] = useState<VendorBill[]>([]);
+  const [vendorPayments, setVendorPayments] = useState<VendorPayment[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  const [technicianPayProfiles, setTechnicianPayProfiles] = useState<TechnicianPayProfile[]>([]);
+  const [timesheetApprovals, setTimesheetApprovals] = useState<TimesheetApproval[]>([]);
+  const [payrollBatches, setPayrollBatches] = useState<PayrollExportBatch[]>([]);
+  const [taxProfiles, setTaxProfiles] = useState<TaxProfile[]>([]);
+  const [financialActivities, setFinancialActivities] = useState<FinancialActivity[]>([]);
+
   const [loading, setLoading] = useState(true);
 
   // Test connection on boot
@@ -648,6 +685,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAppointmentRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentRecord)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'appointmentRecords'));
 
+    // Accounting Listeners - ADMIN only
+    let unsubVendors = () => {};
+    let unsubBills = () => {};
+    let unsubVendorPayments = () => {};
+    let unsubExpenses = () => {};
+    let unsubPayProfiles = () => {};
+    let unsubTimesheets = () => {};
+    let unsubPayroll = () => {};
+    let unsubTaxes = () => {};
+    let unsubFinanceActivity = () => {};
+
+    if (role === 'ADMIN') {
+      unsubVendors = onSnapshot(collection(db, 'vendors'), (s) => setVendors(s.docs.map(d => ({ id: d.id, ...d.data() } as Vendor))), (err) => handleFirestoreError(err, OperationType.LIST, 'vendors'));
+      unsubBills = onSnapshot(collection(db, 'vendorBills'), (s) => setVendorBills(s.docs.map(d => ({ id: d.id, ...d.data() } as VendorBill))), (err) => handleFirestoreError(err, OperationType.LIST, 'vendorBills'));
+      unsubVendorPayments = onSnapshot(collection(db, 'vendorPayments'), (s) => setVendorPayments(s.docs.map(d => ({ id: d.id, ...d.data() } as VendorPayment))), (err) => handleFirestoreError(err, OperationType.LIST, 'vendorPayments'));
+      unsubExpenses = onSnapshot(collection(db, 'expenses'), (s) => setExpenses(s.docs.map(d => ({ id: d.id, ...d.data() } as ExpenseRecord))), (err) => handleFirestoreError(err, OperationType.LIST, 'expenses'));
+      unsubPayProfiles = onSnapshot(collection(db, 'technicianPayProfiles'), (s) => setTechnicianPayProfiles(s.docs.map(d => ({ id: d.id, ...d.data() } as TechnicianPayProfile))), (err) => handleFirestoreError(err, OperationType.LIST, 'technicianPayProfiles'));
+      unsubTimesheets = onSnapshot(collection(db, 'timesheetApprovals'), (s) => setTimesheetApprovals(s.docs.map(d => ({ id: d.id, ...d.data() } as TimesheetApproval))), (err) => handleFirestoreError(err, OperationType.LIST, 'timesheetApprovals'));
+      unsubPayroll = onSnapshot(collection(db, 'payrollBatches'), (s) => setPayrollBatches(s.docs.map(d => ({ id: d.id, ...d.data() } as PayrollExportBatch))), (err) => handleFirestoreError(err, OperationType.LIST, 'payrollBatches'));
+      unsubTaxes = onSnapshot(collection(db, 'taxProfiles'), (s) => setTaxProfiles(s.docs.map(d => ({ id: d.id, ...d.data() } as TaxProfile))), (err) => handleFirestoreError(err, OperationType.LIST, 'taxProfiles'));
+      unsubFinanceActivity = onSnapshot(collection(db, 'financialActivity'), (s) => setFinancialActivities(s.docs.map(d => ({ id: d.id, ...d.data() } as FinancialActivity))), (err) => handleFirestoreError(err, OperationType.LIST, 'financialActivity'));
+    }
+
     setLoading(false);
 
     return () => {
@@ -680,6 +740,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubAvailability();
       unsubBlocked();
       unsubAppointments();
+      unsubVendors();
+      unsubBills();
+      unsubVendorPayments();
+      unsubExpenses();
+      unsubPayProfiles();
+      unsubTimesheets();
+      unsubPayroll();
+      unsubTaxes();
+      unsubFinanceActivity();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -1174,8 +1243,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const createInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
     try {
       // Prevent duplicate invoices for the same ticket
-      const existingInvoice = invoices.find(i => i.id === invoice.ticketId); // Wait, invoice.id is usually ticketId in some models, but here it's a separate doc.
-      // Let's check by ticketId
       const existingInvoiceByTicket = invoices.find(i => i.ticketId === invoice.ticketId);
       if (existingInvoiceByTicket) {
         throw new Error('An invoice already exists for this ticket.');
@@ -1183,6 +1250,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const newInvoice = {
         ...invoice,
+        amountPaid: invoice.amountPaid || 0,
+        balanceRemaining: invoice.balanceRemaining !== undefined ? invoice.balanceRemaining : invoice.total,
         createdAt: new Date().toISOString(),
       };
       await addDoc(collection(db, 'invoices'), newInvoice);
@@ -1783,12 +1852,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return sum + (p?.amount || 0);
       }, payment.amount);
 
+      const balanceRemaining = Math.max(0, invoice.total - totalPaid);
       const status = totalPaid >= invoice.total ? 'paid' : 'unpaid';
+      
       await updateDoc(doc(db, 'invoices', invoice.id), { 
         paymentIds, 
         status,
+        amountPaid: totalPaid,
+        balanceRemaining,
         paidDate: status === 'paid' ? new Date().toISOString() : invoice.paidDate,
         paymentMethod: payment.method
+      });
+
+      await logFinancialActivity({
+        type: 'payment_received',
+        amount: payment.amount,
+        description: `Payment received for invoice #${invoice.id.slice(-6)}`,
+        referenceId: invoice.id,
+        referenceType: 'invoice'
       });
 
       await logActivity({
@@ -2105,7 +2186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newSession: Omit<WorkSession, 'id'> = {
         ticketId,
         technicianId: currentUser.id,
-        startedAt: new Date().toISOString(),
+        startTime: new Date().toISOString(),
         sessionType,
         notes,
         status: 'active',
@@ -2130,11 +2211,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const session = workSessions.find(s => s.id === sessionId);
       if (!session) return;
 
-      const endedAt = new Date().toISOString();
-      const durationMinutes = Math.round((new Date(endedAt).getTime() - new Date(session.startedAt).getTime()) / 60000);
+      const endTime = new Date().toISOString();
+      const durationMinutes = Math.round((new Date(endTime).getTime() - new Date(session.startTime).getTime()) / 60000);
 
       await updateDoc(doc(db, 'workSessions', sessionId), {
-        endedAt,
+        endTime,
         durationMinutes,
         notes: session.notes ? `${session.notes}\n${notes}` : notes,
         status: 'completed',
@@ -2423,6 +2504,220 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Accounting Methods
+  const createVendor = async (vendor: Omit<Vendor, 'id' | 'createdAt'>) => {
+    try {
+      await addDoc(collection(db, 'vendors'), { ...vendor, createdAt: new Date().toISOString() });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'vendors');
+    }
+  };
+
+  const updateVendor = async (id: string, updates: Partial<Vendor>) => {
+    try {
+      await updateDoc(doc(db, 'vendors', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `vendors/${id}`);
+    }
+  };
+
+  const createVendorBill = async (bill: Omit<VendorBill, 'id' | 'createdAt'>) => {
+    try {
+      const billRef = await addDoc(collection(db, 'vendorBills'), { ...bill, createdAt: new Date().toISOString() });
+      await logFinancialActivity({
+        type: 'bill_received',
+        amount: bill.total,
+        description: `Bill received from ${bill.vendorName}`,
+        referenceId: billRef.id,
+        referenceType: 'bill'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'vendorBills');
+    }
+  };
+
+  const updateVendorBill = async (id: string, updates: Partial<VendorBill>) => {
+    try {
+      await updateDoc(doc(db, 'vendorBills', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `vendorBills/${id}`);
+    }
+  };
+
+  const recordVendorPayment = async (payment: Omit<VendorPayment, 'id' | 'timestamp'>) => {
+    try {
+      const bill = vendorBills.find(b => b.id === payment.billId);
+      if (!bill) throw new Error('Bill not found');
+
+      const newPayment = {
+        ...payment,
+        timestamp: new Date().toISOString(),
+        recordedBy: currentUser.id,
+        recordedByName: currentUser.fullName
+      };
+      await addDoc(collection(db, 'vendorPayments'), newPayment);
+
+      const amountPaid = (bill.amountPaid || 0) + payment.amount;
+      const balanceRemaining = Math.max(0, bill.total - amountPaid);
+      const status = balanceRemaining === 0 ? 'paid' : 'partially_paid';
+
+      await updateVendorBill(bill.id, { amountPaid, balanceRemaining, status });
+
+      await logFinancialActivity({
+        type: 'bill_paid',
+        amount: payment.amount,
+        description: `Payment recorded for bill #${bill.billNumber}`,
+        referenceId: bill.id,
+        referenceType: 'bill'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'vendorPayments');
+    }
+  };
+
+  const createExpense = async (expense: Omit<ExpenseRecord, 'id' | 'createdAt'>) => {
+    try {
+      const expenseRef = await addDoc(collection(db, 'expenses'), { ...expense, createdAt: new Date().toISOString() });
+      await logFinancialActivity({
+        type: 'expense_recorded',
+        amount: expense.total,
+        description: `Expense recorded: ${expense.category}`,
+        referenceId: expenseRef.id,
+        referenceType: 'expense'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'expenses');
+    }
+  };
+
+  const updateExpense = async (id: string, updates: Partial<ExpenseRecord>) => {
+    try {
+      await updateDoc(doc(db, 'expenses', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `expenses/${id}`);
+    }
+  };
+
+  const approveTimesheet = async (approval: Omit<TimesheetApproval, 'id'>) => {
+    try {
+      const approvalRef = await addDoc(collection(db, 'timesheetApprovals'), approval);
+      await logFinancialActivity({
+        type: 'timesheet_approved',
+        amount: 0, // Labor cost is tracked via job costing
+        description: `Timesheet approved for ${approval.technicianName}`,
+        referenceId: approvalRef.id,
+        referenceType: 'timesheet'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'timesheetApprovals');
+    }
+  };
+
+  const createPayrollBatch = async (batch: Omit<PayrollExportBatch, 'id' | 'createdAt'>) => {
+    try {
+      const batchRef = await addDoc(collection(db, 'payrollBatches'), { ...batch, createdAt: new Date().toISOString() });
+      await logFinancialActivity({
+        type: 'payroll_processed',
+        amount: batch.totalAmount,
+        description: `Payroll batch processed for ${batch.technicianCount} technicians`,
+        referenceId: batchRef.id,
+        referenceType: 'payroll'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'payrollBatches');
+    }
+  };
+
+  const createTaxProfile = async (profile: Omit<TaxProfile, 'id'>) => {
+    try {
+      await addDoc(collection(db, 'taxProfiles'), profile);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'taxProfiles');
+    }
+  };
+
+  const updateTaxProfile = async (id: string, updates: Partial<TaxProfile>) => {
+    try {
+      await updateDoc(doc(db, 'taxProfiles', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `taxProfiles/${id}`);
+    }
+  };
+
+  const logFinancialActivity = async (activity: Omit<FinancialActivity, 'id' | 'timestamp' | 'actorId' | 'actorName'>) => {
+    try {
+      await addDoc(collection(db, 'financialActivity'), {
+        ...activity,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.fullName
+      });
+    } catch (error) {
+      console.error('Failed to log financial activity', error);
+    }
+  };
+
+  const calculateJobCosting = (ticketId: string): JobCostSnapshot => {
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) throw new Error('Ticket not found');
+
+    // 1. Revenue (Invoices)
+    const ticketInvoices = invoices.filter(inv => inv.ticketId === ticketId);
+    const revenue = ticketInvoices.reduce((sum, inv) => sum + inv.total, 0);
+
+    // 2. Labor Cost (Work Sessions)
+    const ticketSessions = workSessions.filter(ws => ws.ticketId === ticketId);
+    let laborCost = 0;
+    for (const session of ticketSessions) {
+      const techProfile = technicianPayProfiles.find(p => p.technicianId === session.technicianId);
+      const hourlyRate = techProfile?.hourlyRate || 35; // Fallback
+      const travelRate = techProfile?.travelRate || 25; // Fallback
+      
+      if (session.startTime && session.endTime) {
+        const durationHours = (new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / (1000 * 60 * 60);
+        const rate = session.sessionType === 'onsite' ? hourlyRate : travelRate;
+        laborCost += durationHours * rate;
+      }
+    }
+
+    // 3. Material Cost (Materials Used)
+    const ticketMaterials = materialsUsed.filter(m => m.ticketId === ticketId);
+    const materialCost = ticketMaterials.reduce((sum, m) => sum + (m.unitCost || 0) * m.quantity, 0);
+
+    // 4. External Expenses (Vendor Bills & Expenses)
+    const ticketBills = vendorBills.filter(b => b.ticketId === ticketId);
+    const billCost = ticketBills.reduce((sum, b) => sum + b.total, 0);
+    
+    const ticketExpenses = expenses.filter(e => e.ticketId === ticketId);
+    const expenseCost = billCost + ticketExpenses.reduce((sum, e) => sum + e.total, 0);
+
+    const totalCost = laborCost + materialCost + expenseCost;
+    const grossMargin = revenue - totalCost;
+    const marginPercentage = revenue > 0 ? (grossMargin / revenue) * 100 : 0;
+
+    const snapshot: JobCostSnapshot = {
+      id: `cost_${ticketId}_${Date.now()}`,
+      ticketId,
+      revenue,
+      laborCost,
+      materialCost,
+      expenseCost,
+      totalCost,
+      grossMargin,
+      profit: grossMargin,
+      marginPercentage,
+      margin: marginPercentage,
+      lastUpdated: new Date().toISOString()
+    };
+
+    // Background update to persist the snapshot
+    updateDoc(doc(db, 'tickets', ticketId), { jobCosting: snapshot }).catch(err => {
+      console.error('Failed to update job costing in background', err);
+    });
+
+    return snapshot;
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
@@ -2431,6 +2726,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clientAccounts, clientAccount, clientMembers, clientInvitations, maintenancePlans, paymentRecords, approvalRecords, reminderEvents, authorizationRecords, recurringGenerationLog,
       workSessions, inventoryItems, technicianStock, partsRequests, checklistTemplates, ticketChecklists, pendingSyncQueue, stockMovements,
       technicianAvailabilityRules, technicianBlockedSlots, appointmentRecords,
+      vendors, vendorBills, vendorPayments, expenses, technicianPayProfiles, timesheetApprovals, payrollBatches, taxProfiles, financialActivities,
       loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
@@ -2443,6 +2739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startWorkSession, stopWorkSession, createPartsRequest, updatePartsRequestStatus, updateInventoryQuantity, updateChecklistItem, enqueuePendingSyncAction, retryPendingSyncAction,
       createInventoryItem, updateInventoryItem, adjustTechnicianStock, transferStockToTechnician, createStockMovement, fulfillPartsRequest, markPartsRequestOrdered, markPartsRequestReceived, cancelPartsRequest,
       createAppointmentProposal, confirmAppointment, requestAppointmentReschedule, cancelAppointment, createBlockedSlot, updateBlockedSlot, removeBlockedSlot, updateTechnicianAvailabilityRule, getTechnicianCapacityForDay,
+      createVendor, updateVendor, createVendorBill, updateVendorBill, recordVendorPayment, createExpense, updateExpense, approveTimesheet, createPayrollBatch, createTaxProfile, updateTaxProfile, logFinancialActivity, calculateJobCosting,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

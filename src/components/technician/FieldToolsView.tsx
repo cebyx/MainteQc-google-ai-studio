@@ -81,7 +81,7 @@ export const FieldToolsView: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4 text-gray-400" />
-                    Started {format(new Date(activeSession.startedAt), 'h:mm a')}
+                    Started {format(new Date(activeSession.startTime), 'h:mm a')}
                   </div>
                 </div>
               </div>

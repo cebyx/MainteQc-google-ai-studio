@@ -17,6 +17,7 @@ export const BillingView: React.FC = () => {
   const [signatureName, setSignatureName] = useState(currentUser?.fullName || '');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
 
   const handleCreateQuote = async () => {
     if (!selectedTicketId) return;
@@ -64,6 +65,8 @@ export const BillingView: React.FC = () => {
         subtotal: 250.00,
         tax: 0,
         total: 250.00,
+        amountPaid: 0,
+        balanceRemaining: 250.00,
         dueDate: dueDate.toISOString(),
         paymentMethod: '',
         notes: 'Initial invoice',
@@ -128,27 +131,28 @@ export const BillingView: React.FC = () => {
 
   const handleInvoiceAction = async (id: string, status: 'paid', method: string) => {
     if (status === 'paid') {
+      const invoice = invoices.find(i => i.id === id);
+      if (!invoice) return;
+      
       if (role === 'CLIENT') {
         setIsProcessing(`invoice-${id}`);
         try {
-          const invoice = invoices.find(i => i.id === id);
-          if (invoice) {
-            await recordPayment({
-              invoiceId: invoice.id,
-              ticketId: invoice.ticketId,
-              clientId: invoice.clientId,
-              amount: invoice.total,
-              currency: 'USD',
-              method: method as any,
-              reference: 'Online Payment',
-              status: 'completed',
-              notes: 'Paid via client portal'
-            });
-          }
+          await recordPayment({
+            invoiceId: invoice.id,
+            ticketId: invoice.ticketId,
+            clientId: invoice.clientId,
+            amount: invoice.balanceRemaining ?? invoice.total,
+            currency: 'USD',
+            method: method as any,
+            reference: 'Online Payment',
+            status: 'completed',
+            notes: 'Paid via client portal'
+          });
         } finally {
           setIsProcessing(null);
         }
       } else {
+        setPaymentAmount(invoice.balanceRemaining ?? invoice.total);
         setShowPaymentModal(id);
       }
       return;
@@ -174,7 +178,7 @@ export const BillingView: React.FC = () => {
         invoiceId: invoice.id,
         ticketId: invoice.ticketId,
         clientId: invoice.clientId,
-        amount: invoice.total,
+        amount: paymentAmount,
         currency: 'USD',
         method: paymentMethod as any,
         reference: paymentReference,
@@ -184,6 +188,7 @@ export const BillingView: React.FC = () => {
       setShowPaymentModal(null);
       setPaymentMethod('');
       setPaymentReference('');
+      setPaymentAmount(0);
     } finally {
       setIsProcessing(null);
     }
@@ -402,7 +407,12 @@ export const BillingView: React.FC = () => {
                     </div>
                     <div className="mb-4">
                       <div className="text-2xl font-black text-gray-900">{formatCurrency(invoice.total)}</div>
-                      <div className="text-xs text-gray-500">Due: {formatDate(invoice.dueDate)}</div>
+                      <div className="flex justify-between items-center text-xs text-gray-500">
+                        <span>Due: {formatDate(invoice.dueDate)}</span>
+                        {invoice.balanceRemaining !== undefined && invoice.balanceRemaining < invoice.total && (
+                          <span className="font-bold text-rose-600">Balance: {formatCurrency(invoice.balanceRemaining)}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-6 flex flex-col gap-2">
                       {invoice.status === 'unpaid' && role === 'CLIENT' ? (
@@ -656,6 +666,19 @@ export const BillingView: React.FC = () => {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-bold text-gray-900">Record Payment</h3>
             <div className="space-y-4 mb-6">
+              <div>
+                <label className="mb-2 block text-sm font-bold text-gray-700">Payment Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input
+                    type="number"
+                    className="w-full rounded-xl border-gray-200 pl-8 text-sm"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="mb-2 block text-sm font-bold text-gray-700">Payment Method</label>
                 <select

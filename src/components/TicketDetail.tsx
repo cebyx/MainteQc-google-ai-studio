@@ -33,7 +33,7 @@ import {
   Check,
   X
 } from 'lucide-react';
-import { formatDate, cn } from '../lib/utils';
+import { formatDate, cn, formatCurrency } from '../lib/utils';
 import { STATUS_LABELS } from '../constants';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { PartsUsedPanel } from './PartsUsedPanel';
@@ -185,14 +185,15 @@ const WorkAuthorizationPanel: React.FC<{ ticket: Ticket; allowSign: boolean }> =
 };
 
 const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; editedTicket: Partial<Ticket>; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void; onClose: () => void }> = ({ ticket, currentTicket, editedTicket, handleChange, handleSave, handleStatusChange, onClose }) => {
-  const { technicians, approveTicket, rejectTicket, quotes, invoices, createQuote, updateQuote, createInvoice, updateInvoice, appointmentRecords } = useApp();
+  const { technicians, approveTicket, rejectTicket, quotes, invoices, createQuote, updateQuote, createInvoice, updateInvoice, appointmentRecords, calculateJobCosting } = useApp();
   const [editingFinancial, setEditingFinancial] = useState<'quote' | 'invoice' | null>(null);
   const [showProposalModal, setShowProposalModal] = useState(false);
   
   const isPending = ticket.status === 'pending_review';
   const ticketQuote = quotes.find(q => q.ticketId === ticket.id);
-  const ticketInvoice = invoices.find(i => i.ticketId === ticket.id);
+  const ticketInvoice = invoices.find(i => i.id === ticket.id) || invoices.find(i => i.ticketId === ticket.id);
   const activeAppointment = appointmentRecords.find(a => a.ticketId === ticket.id && (a.status === 'proposed' || a.status === 'confirmed'));
+  const costing = calculateJobCosting(ticket.id);
 
   const handleAddLineItem = (type: 'quote' | 'invoice') => {
     const financial = type === 'quote' ? ticketQuote : ticketInvoice;
@@ -384,8 +385,41 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
         <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200">
           <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            Financials
+            Financials & Job Costing
           </h4>
+          
+          {/* Job Costing Snapshot */}
+          <div className="mb-6 grid grid-cols-2 gap-3">
+            <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Revenue</div>
+              <div className="text-lg font-black text-emerald-600">{formatCurrency(costing.revenue)}</div>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Cost</div>
+              <div className="text-lg font-black text-rose-600">{formatCurrency(costing.totalCost)}</div>
+            </div>
+            <div className="col-span-2 bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
+              <div>
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Gross Profit</div>
+                <div className={cn(
+                  "text-xl font-black",
+                  costing.profit >= 0 ? "text-emerald-600" : "text-rose-600"
+                )}>
+                  {formatCurrency(costing.profit)}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Margin</div>
+                <div className={cn(
+                  "text-xl font-black",
+                  costing.margin >= 20 ? "text-emerald-600" : costing.margin >= 0 ? "text-amber-600" : "text-rose-600"
+                )}>
+                  {costing.margin.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-4">
             {/* Quote Section */}
             <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm">
@@ -583,6 +617,8 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
                     subtotal: 0,
                     tax: 0,
                     total: 0,
+                    amountPaid: 0,
+                    balanceRemaining: 0,
                     dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
                     notes: ''
                   })}
@@ -694,7 +730,7 @@ const WorkSessionControls: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
             </div>
             <div className="text-right">
               <div className="text-xl font-mono font-bold text-blue-600 animate-pulse">
-                {formatDate(activeSession.startedAt)}
+                {formatDate(activeSession.startTime)}
               </div>
               <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Started At</div>
             </div>

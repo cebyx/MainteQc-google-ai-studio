@@ -439,6 +439,117 @@ service cloud.firestore {
              (!('notes' in data) || data.notes is string);
     }
 
+    function isValidVendor() {
+      let data = request.resource.data;
+      return hasRequiredFields(['name', 'status', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.status in ['active', 'inactive'] &&
+             data.createdAt is string &&
+             (!('contactName' in data) || data.contactName is string) &&
+             (!('email' in data) || data.email is string) &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('address' in data) || data.address is string) &&
+             (!('category' in data) || data.category is string);
+    }
+
+    function isValidVendorBill() {
+      let data = request.resource.data;
+      return hasRequiredFields(['vendorId', 'vendorName', 'status', 'total', 'dueDate', 'billDate', 'createdAt']) &&
+             data.vendorId is string &&
+             data.vendorName is string &&
+             data.status in ['pending', 'approved', 'paid', 'overdue', 'cancelled'] &&
+             data.total is number &&
+             data.dueDate is string &&
+             data.billDate is string &&
+             data.createdAt is string &&
+             (!('billNumber' in data) || data.billNumber is string) &&
+             (!('ticketId' in data) || data.ticketId is string) &&
+             (!('notes' in data) || data.notes is string);
+    }
+
+    function isValidVendorPayment() {
+      let data = request.resource.data;
+      return hasRequiredFields(['vendorId', 'billId', 'amount', 'method', 'timestamp']) &&
+             data.vendorId is string &&
+             data.billId is string &&
+             data.amount is number &&
+             data.method is string &&
+             data.timestamp is string &&
+             (!('reference' in data) || data.reference is string);
+    }
+
+    function isValidExpense() {
+      let data = request.resource.data;
+      return hasRequiredFields(['category', 'amount', 'description', 'date', 'status', 'createdAt']) &&
+             data.category is string &&
+             data.amount is number &&
+             data.description is string &&
+             data.date is string &&
+             data.status in ['pending', 'approved', 'reimbursed', 'rejected'] &&
+             data.createdAt is string &&
+             (!('ticketId' in data) || data.ticketId is string) &&
+             (!('technicianId' in data) || data.technicianId is string) &&
+             (!('receiptUrl' in data) || data.receiptUrl is string);
+    }
+
+    function isValidPayProfile() {
+      let data = request.resource.data;
+      return hasRequiredFields(['technicianId', 'hourlyRate']) &&
+             data.technicianId is string &&
+             data.hourlyRate is number &&
+             (!('travelRate' in data) || data.travelRate is number) &&
+             (!('overtimeRate' in data) || data.overtimeRate is number) &&
+             (!('payFrequency' in data) || data.payFrequency in ['weekly', 'bi-weekly', 'monthly']) &&
+             (!('taxStatus' in data) || data.taxStatus is string);
+    }
+
+    function isValidTimesheetApproval() {
+      let data = request.resource.data;
+      return hasRequiredFields(['technicianId', 'startDate', 'endDate', 'totalHours', 'totalPay', 'status']) &&
+             data.technicianId is string &&
+             data.startDate is string &&
+             data.endDate is string &&
+             data.totalHours is number &&
+             data.totalPay is number &&
+             data.status in ['pending', 'approved', 'paid'] &&
+             (!('approvedBy' in data) || data.approvedBy is string) &&
+             (!('approvedAt' in data) || data.approvedAt is string);
+    }
+
+    function isValidPayrollBatch() {
+      let data = request.resource.data;
+      return hasRequiredFields(['batchName', 'periodStart', 'periodEnd', 'totalAmount', 'employeeCount', 'status', 'createdAt']) &&
+             data.batchName is string &&
+             data.periodStart is string &&
+             data.periodEnd is string &&
+             data.totalAmount is number &&
+             data.employeeCount is int &&
+             data.status in ['draft', 'exported', 'processed'] &&
+             data.createdAt is string;
+    }
+
+    function isValidTaxProfile() {
+      let data = request.resource.data;
+      return hasRequiredFields(['name', 'rate']) &&
+             data.name is string &&
+             data.rate is number &&
+             (!('description' in data) || data.description is string) &&
+             (!('isDefault' in data) || data.isDefault is bool);
+    }
+
+    function isValidFinancialActivity() {
+      let data = request.resource.data;
+      return hasRequiredFields(['type', 'amount', 'description', 'timestamp', 'actorId', 'actorName']) &&
+             data.type in ['income', 'expense', 'payroll', 'tax', 'vendor_payment'] &&
+             data.amount is number &&
+             data.description is string &&
+             data.timestamp is string &&
+             data.actorId is string &&
+             data.actorName is string &&
+             (!('relatedId' in data) || data.relatedId is string) &&
+             (!('relatedType' in data) || data.relatedType is string);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -690,6 +801,61 @@ service cloud.firestore {
         (resource.data.clientId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rescheduleReason', 'updatedAt']))
       );
       allow delete: if isAdmin();
+    }
+
+    match /vendors/{vendorId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create, update: if isAdmin() && isValidVendor();
+      allow delete: if isAdmin();
+    }
+
+    match /vendorBills/{billId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create, update: if isAdmin() && isValidVendorBill();
+      allow delete: if isAdmin();
+    }
+
+    match /vendorPayments/{paymentId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create: if isAdmin() && isValidVendorPayment();
+      allow update, delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
+      allow create: if isAuthenticated() && (isAdmin() || (isTechnician() && request.resource.data.technicianId == request.auth.uid)) && isValidExpense();
+      allow update: if isAuthenticated() && (isAdmin() || (isTechnician() && resource.data.technicianId == request.auth.uid && resource.data.status == 'pending')) && isValidExpense();
+      allow delete: if isAdmin();
+    }
+
+    match /technicianPayProfiles/{profileId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
+      allow create, update: if isAdmin() && isValidPayProfile();
+      allow delete: if isAdmin();
+    }
+
+    match /timesheetApprovals/{approvalId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
+      allow create, update: if isAdmin() && isValidTimesheetApproval();
+      allow delete: if isAdmin();
+    }
+
+    match /payrollBatches/{batchId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create, update: if isAdmin() && isValidPayrollBatch();
+      allow delete: if isAdmin();
+    }
+
+    match /taxProfiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidTaxProfile();
+      allow delete: if isAdmin();
+    }
+
+    match /financialActivity/{activityId} {
+      allow read: if isAuthenticated() && isAdmin();
+      allow create: if isAuthenticated() && (isAdmin() || isTechnician()) && isValidFinancialActivity();
+      allow update, delete: if isAdmin();
     }
   }
 }

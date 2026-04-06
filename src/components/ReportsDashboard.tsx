@@ -15,7 +15,8 @@ export const ReportsDashboard: React.FC = () => {
   const { 
     tickets, quotes, invoices, technicians, clients, 
     maintenancePlans, approvalRecords, paymentRecords, reminderEvents,
-    partsRequests, technicianStock, inventoryItems
+    partsRequests, technicianStock, inventoryItems,
+    expenses, vendorBills
   } = useApp();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
 
@@ -31,16 +32,22 @@ export const ReportsDashboard: React.FC = () => {
     
     const totalPayments = paymentRecords.reduce((sum, p) => sum + p.amount, 0);
 
+    const totalExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0);
+    const totalVendorBills = vendorBills.reduce((sum, b) => sum + b.total, 0);
+    const netProfit = totalRevenue - (totalExpenses + totalVendorBills);
+
     return {
       totalRevenue,
       outstandingRevenue,
       overdueRevenue,
       totalPayments,
+      totalExpenses: totalExpenses + totalVendorBills,
+      netProfit,
       paidCount: paidInvoices.length,
       unpaidCount: unpaidInvoices.length,
       overdueCount: overdueInvoices.length
     };
-  }, [invoices, paymentRecords]);
+  }, [invoices, paymentRecords, expenses, vendorBills]);
 
   // Maintenance Plan Metrics
   const maintenanceStats = useMemo(() => {
@@ -204,6 +211,14 @@ export const ReportsDashboard: React.FC = () => {
           subtitle="Paid invoices to date"
         />
         <StatCard 
+          title="Net Profit" 
+          value={`$${financialStats.netProfit.toLocaleString()}`} 
+          icon={<TrendingUp className="h-5 w-5 text-blue-600" />}
+          trend={`${((financialStats.netProfit / (financialStats.totalRevenue || 1)) * 100).toFixed(1)}% margin`}
+          trendUp={financialStats.netProfit > 0}
+          subtitle="Revenue minus expenses"
+        />
+        <StatCard 
           title="Recurring Revenue" 
           value={`$${maintenanceStats.monthlyRecurringRevenue.toLocaleString()}/mo`} 
           icon={<Clock className="h-5 w-5 text-blue-600" />}
@@ -218,14 +233,6 @@ export const ReportsDashboard: React.FC = () => {
           trend={`${approvalStats.approved} approved`}
           trendUp={true}
           subtitle="Quote approvals"
-        />
-        <StatCard 
-          title="Reminders Sent" 
-          value={`${reminderStats.total}`} 
-          icon={<AlertCircle className="h-5 w-5 text-amber-600" />}
-          trend={`${reminderStats.invoices} invoices`}
-          trendUp={true}
-          subtitle="Follow-ups"
         />
       </div>
 

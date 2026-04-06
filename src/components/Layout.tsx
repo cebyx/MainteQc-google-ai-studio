@@ -24,7 +24,12 @@ import {
   Package,
   LayoutGrid,
   History,
-  ShoppingCart
+  ShoppingCart,
+  Calculator,
+  TrendingUp,
+  TrendingDown,
+  Receipt,
+  PieChart as PieChartIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -73,6 +78,12 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'purchasing', label: 'Purchasing', icon: ShoppingCart },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'billing', label: 'Quotes & Invoices', icon: FileText },
+    { id: 'accounting', label: 'Accounting Overview', icon: Calculator },
+    { id: 'ar', label: 'Accounts Receivable', icon: TrendingUp },
+    { id: 'ap', label: 'Accounts Payable', icon: TrendingDown },
+    { id: 'expenses', label: 'Expenses', icon: Receipt },
+    { id: 'payroll', label: 'Payroll', icon: Users },
+    { id: 'fin-reports', label: 'Financial Reports', icon: PieChartIcon },
     { id: 'brand', label: 'Brand Settings', icon: Settings },
   ];
 
