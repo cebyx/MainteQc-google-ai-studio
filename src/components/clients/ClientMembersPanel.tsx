@@ -6,6 +6,7 @@ import {
   Shield, 
   CheckCircle2, 
   AlertCircle,
+  XCircle,
   Save,
   Trash2,
   ChevronDown
@@ -19,7 +20,7 @@ interface ClientMembersPanelProps {
 }
 
 const ClientMembersPanel: React.FC<ClientMembersPanelProps> = ({ member, onClose }) => {
-  const { clientAccount, inviteClientMember, updateClientMemberRole, removeClientMember } = useApp();
+  const { clientAccount, inviteClientMember, updateClientMemberRole, removeClientMember, deactivateClientMember, reactivateClientMember } = useApp();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,8 +58,26 @@ const ClientMembersPanel: React.FC<ClientMembersPanelProps> = ({ member, onClose
     }
   };
 
+  const handleToggleStatus = async () => {
+    if (!member) return;
+    
+    setLoading(true);
+    try {
+      if (member.status === 'active') {
+        await deactivateClientMember(member.id);
+      } else {
+        await reactivateClientMember(member.id);
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update member status.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async () => {
-    if (!member || !window.confirm('Are you sure you want to remove this member from your team?')) return;
+    if (!member || !window.confirm('Are you sure you want to permanently remove this member? This action cannot be undone.')) return;
     
     setLoading(true);
     try {
@@ -147,17 +166,29 @@ const ClientMembersPanel: React.FC<ClientMembersPanelProps> = ({ member, onClose
           </div>
         </form>
 
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between gap-3">
           {member && member.role !== 'owner' && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={loading}
-              className="flex items-center gap-2 text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Remove Member</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleStatus}
+                disabled={loading}
+                className={`flex items-center gap-2 font-medium disabled:opacity-50 ${member.status === 'active' ? 'text-amber-600 hover:text-amber-700' : 'text-green-600 hover:text-green-700'}`}
+              >
+                {member.status === 'active' ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{member.status === 'active' ? 'Deactivate' : 'Reactivate'}</span>
+              </button>
+              <span className="text-gray-300">|</span>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={loading}
+                className="flex items-center gap-2 text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Remove</span>
+              </button>
+            </div>
           )}
           <div className="flex items-center gap-3 ml-auto">
             <button

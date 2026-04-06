@@ -351,3 +351,92 @@ export interface AuthorizationRecord {
   notes: string;
   status: 'authorized' | 'revoked';
 }
+
+export interface WorkSession {
+  id: string;
+  ticketId: string;
+  technicianId: string;
+  startedAt: string;
+  endedAt?: string;
+  sessionType: 'travel' | 'onsite' | 'pause';
+  notes: string;
+  durationMinutes?: number;
+  status: 'active' | 'completed';
+  location?: { latitude: number; longitude: number };
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  unit: string;
+  basePrice: number;
+  description: string;
+}
+
+export interface TechnicianStock {
+  id: string;
+  technicianId: string;
+  itemId: string;
+  quantity: number;
+  minThreshold: number;
+  lastRestockedAt: string;
+}
+
+export interface PartsRequest {
+  id: string;
+  ticketId: string;
+  technicianId: string;
+  items: { itemId: string; name: string; quantity: number }[];
+  urgency: 'low' | 'medium' | 'high' | 'emergency';
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'ordered' | 'received' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+  adminNotes?: string;
+}
+
+export interface ChecklistItemTemplate {
+  id: string;
+  label: string;
+  required: boolean;
+  order: number;
+}
+
+export interface ChecklistTemplate {
+  id: string;
+  category: string; // matches ticket category
+  title: string;
+  items: ChecklistItemTemplate[];
+}
+
+export interface TicketChecklistItem {
+  id: string;
+  label: string;
+  description?: string;
+  required: boolean;
+  completed: boolean;
+  completedAt?: string;
+  completedBy?: string;
+  note?: string;
+}
+
+export interface TicketChecklist {
+  id: string;
+  ticketId: string;
+  templateId: string;
+  title: string;
+  items: TicketChecklistItem[];
+  completedAt?: string;
+  status: 'in_progress' | 'completed';
+}
+
+export interface PendingSyncAction {
+  id: string;
+  type: 'update_ticket' | 'add_note' | 'checklist_item' | 'part_used' | 'closeout';
+  payload: any;
+  timestamp: string;
+  status: 'pending' | 'failed';
+  error?: string;
+}

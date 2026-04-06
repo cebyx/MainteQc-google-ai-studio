@@ -20,14 +20,29 @@ import { ProfileView } from './components/ProfileView';
 import { DocumentsCenter } from './components/DocumentsCenter';
 import { ReportsDashboard } from './components/ReportsDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { FieldToolsView } from './components/technician/FieldToolsView';
+import { InventoryView } from './components/technician/InventoryView';
+import { TimeTrackingView } from './components/technician/TimeTrackingView';
 import MaintenancePlansView from './components/maintenance/MaintenancePlansView';
 import RecurringWorkQueue from './components/maintenance/RecurringWorkQueue';
 import ClientTeamView from './components/clients/ClientTeamView';
+import InviteAcceptanceView from './components/clients/InviteAcceptanceView';
 import { Shield, Wrench, User, LogIn, LogOut, Clock } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { role, currentUser, login, logout, isAuthReady } = useApp();
   const [activeTab, setActiveTab] = useState(role === 'TECHNICIAN' ? 'today' : 'dashboard');
+  
+  // Handle invitation token from URL
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    if (token) {
+      setInviteToken(token);
+    }
+  }, []);
 
   // Reset tab when role changes to ensure valid tab for role
   React.useEffect(() => {
@@ -63,6 +78,23 @@ const AppContent: React.FC = () => {
     );
   }
 
+  if (inviteToken) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
+        <InviteAcceptanceView 
+          token={inviteToken} 
+          onComplete={() => {
+            setInviteToken(null);
+            // Clear URL param without reload
+            const url = new URL(window.location.href);
+            url.searchParams.delete('invite');
+            window.history.replaceState({}, '', url.toString());
+          }} 
+        />
+      </div>
+    );
+  }
+
   const renderContent = () => {
     if (role === 'ADMIN') {
       switch (activeTab) {
@@ -87,6 +119,9 @@ const AppContent: React.FC = () => {
       switch (activeTab) {
         case 'today': return <TechnicianDashboard />;
         case 'my-jobs': return <MyJobsView />;
+        case 'field-tools': return <FieldToolsView />;
+        case 'inventory': return <InventoryView />;
+        case 'time': return <TimeTrackingView />;
         case 'messages': return <MessagesView />;
         case 'records': return <DocumentsCenter />;
         case 'profile': return <ProfileView />;

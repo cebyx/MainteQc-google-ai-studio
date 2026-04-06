@@ -1,13 +1,13 @@
 import React from 'react';
-import { Quote, Invoice, ServiceSummary, BrandSettings } from '../types';
-import { X, Download, Printer, Send, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Quote, Invoice, ServiceSummary, BrandSettings, AuthorizationRecord, PaymentRecord, ReminderEvent } from '../types';
+import { X, Download, Printer, Send, FileText, CheckCircle2, AlertCircle, ShieldCheck, DollarSign, Bell, Calendar, User, Clock, Info, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
-  type: 'quote' | 'invoice' | 'summary';
-  data: Quote | Invoice | ServiceSummary;
+  type: 'quote' | 'invoice' | 'summary' | 'authorization' | 'payment' | 'reminder';
+  data: Quote | Invoice | ServiceSummary | AuthorizationRecord | PaymentRecord | ReminderEvent;
   brand: BrandSettings;
   onExport?: () => void;
 }
@@ -262,6 +262,179 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
     </div>
   );
 
+  const renderAuthorization = (auth: AuthorizationRecord) => (
+    <div className="space-y-8 p-8 bg-white text-gray-900" id="printable-document">
+      <div className="flex justify-between items-start border-b pb-8">
+        <div>
+          {brand.logo && <img src={brand.logo} alt={brand.companyName} className="h-12 mb-4 object-contain" referrerPolicy="no-referrer" />}
+          <h1 className="text-2xl font-bold uppercase tracking-tighter">Work Authorization</h1>
+          <p className="text-sm text-gray-500">Record ID: {auth.id.slice(-8).toUpperCase()}</p>
+        </div>
+        <div className="text-right space-y-1">
+          <p className="font-bold">{brand.companyName}</p>
+          <p className="text-sm text-gray-500">Date: {new Date(auth.timestamp).toLocaleDateString()}</p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex gap-3">
+          <ShieldCheck className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-bold text-indigo-900 text-sm">Authorization Type: {auth.type.replace('_', ' ').toUpperCase()}</h3>
+            <p className="text-xs text-indigo-700 mt-1">This document serves as a digital record of approval for the specified work or quote.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-8">
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Related Record</h3>
+            <p className="text-sm font-bold">{(auth as any).quoteId ? `Quote #${(auth as any).quoteId.slice(-6)}` : `Ticket #${auth.ticketId.slice(-6)}`}</p>
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Status</h3>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
+              auth.status === 'authorized' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'
+            }`}>
+              {auth.status}
+            </span>
+          </div>
+        </div>
+
+        <div className="pt-8 border-t">
+          <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Digital Signature</h3>
+          <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 border-dashed text-center">
+            <p className="font-serif text-2xl italic text-gray-800 mb-2">{auth.signatureName}</p>
+            <div className="w-48 h-px bg-gray-300 mx-auto mb-2" />
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Digitally Signed on {new Date(auth.timestamp).toLocaleString()}</p>
+          </div>
+        </div>
+
+        {auth.notes && (
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Authorization Notes</h3>
+            <p className="text-sm text-gray-600 italic">"{auth.notes}"</p>
+          </div>
+        ) || null}
+      </div>
+
+      <div className="pt-12 text-center text-xs text-gray-400">
+        <p>This authorization is legally binding and stored securely in the MainteQc system.</p>
+      </div>
+    </div>
+  );
+
+  const renderPayment = (payment: PaymentRecord) => (
+    <div className="space-y-8 p-8 bg-white text-gray-900" id="printable-document">
+      <div className="flex justify-between items-start border-b pb-8">
+        <div>
+          {brand.logo && <img src={brand.logo} alt={brand.companyName} className="h-12 mb-4 object-contain" referrerPolicy="no-referrer" />}
+          <h1 className="text-2xl font-bold uppercase tracking-tighter">Payment Receipt</h1>
+          <p className="text-sm text-gray-500">Transaction ID: {payment.id.slice(-8).toUpperCase()}</p>
+        </div>
+        <div className="text-right space-y-1">
+          <p className="font-bold">{brand.companyName}</p>
+          <p className="text-sm text-gray-500">Date: {new Date(payment.timestamp).toLocaleDateString()}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center justify-center py-12 bg-green-50 rounded-3xl border border-green-100">
+        <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-green-600/20">
+          <CheckCircle2 className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-3xl font-bold text-green-900">${payment.amount.toFixed(2)}</h2>
+        <p className="text-green-700 font-medium mt-1">Payment Successful</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-8">
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Payment Method</h3>
+            <p className="text-sm font-bold capitalize">{payment.method.replace('_', ' ')}</p>
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Reference</h3>
+            <p className="text-sm font-mono">{payment.reference || 'N/A'}</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Related Invoice</h3>
+            <p className="text-sm font-bold">Invoice #{payment.invoiceId.slice(-6)}</p>
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Status</h3>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 uppercase tracking-wider">
+              {payment.status}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {payment.notes && (
+        <div className="pt-8 border-t">
+          <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Payment Notes</h3>
+          <p className="text-sm text-gray-600">{payment.notes}</p>
+        </div>
+      ) || null}
+
+      <div className="pt-12 text-center text-xs text-gray-400">
+        <p>Thank you for your payment!</p>
+        <p>A copy of this receipt has been saved to your records center.</p>
+      </div>
+    </div>
+  );
+
+  const renderReminder = (reminder: ReminderEvent) => (
+    <div className="space-y-8 p-8 bg-white text-gray-900" id="printable-document">
+      <div className="flex justify-between items-start border-b pb-8">
+        <div>
+          {brand.logo && <img src={brand.logo} alt={brand.companyName} className="h-12 mb-4 object-contain" referrerPolicy="no-referrer" />}
+          <h1 className="text-2xl font-bold uppercase tracking-tighter">Reminder Notice</h1>
+          <p className="text-sm text-gray-500">Notice ID: {reminder.id.slice(-8).toUpperCase()}</p>
+        </div>
+        <div className="text-right space-y-1">
+          <p className="font-bold">{brand.companyName}</p>
+          <p className="text-sm text-gray-500">Sent Date: {new Date(reminder.timestamp).toLocaleDateString()}</p>
+        </div>
+      </div>
+
+      <div className="p-6 bg-amber-50 border border-amber-100 rounded-2xl flex gap-4">
+        <div className="p-3 bg-amber-100 rounded-xl h-fit">
+          <Bell className="w-6 h-6 text-amber-600" />
+        </div>
+        <div>
+          <h3 className="font-bold text-amber-900 text-lg">Action Required: {reminder.type.replace('_', ' ').toUpperCase()}</h3>
+          <p className="text-sm text-amber-700 mt-1">This is a formal reminder regarding an outstanding action on your account.</p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-8">
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Subject</h3>
+            <p className="text-sm font-bold">{reminder.invoiceId ? `Invoice #${reminder.invoiceId.slice(-6)}` : `Quote #${reminder.targetId.slice(-6)}`}</p>
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Notice Type</h3>
+            <p className="text-sm font-bold capitalize">{reminder.type.replace('_', ' ')}</p>
+          </div>
+        </div>
+
+        <div className="pt-8 border-t">
+          <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Message Details</h3>
+          <div className="p-6 bg-gray-50 rounded-xl border border-gray-100 min-h-[100px]">
+            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{reminder.notes || 'No additional notes provided.'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-12 text-center text-xs text-gray-400">
+        <p>If you have already addressed this matter, please disregard this notice.</p>
+        <p>Contact us at {brand.phone} if you have any questions.</p>
+      </div>
+    </div>
+  );
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -313,6 +486,9 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
               {type === 'quote' && renderQuote(data as Quote)}
               {type === 'invoice' && renderInvoice(data as Invoice)}
               {type === 'summary' && renderSummary(data as ServiceSummary)}
+              {type === 'authorization' && renderAuthorization(data as AuthorizationRecord)}
+              {type === 'payment' && renderPayment(data as PaymentRecord)}
+              {type === 'reminder' && renderReminder(data as ReminderEvent)}
             </div>
           </div>
 

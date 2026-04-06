@@ -24,7 +24,11 @@ import {
   ClipboardCheck,
   FileText,
   ShieldCheck,
-  Signature
+  Signature,
+  Play,
+  Square,
+  Pause,
+  Zap
 } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 import { STATUS_LABELS } from '../constants';
@@ -600,6 +604,112 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
   );
 };
 
+const ChecklistPanel: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
+  const { ticketChecklists, updateChecklistItem } = useApp();
+  const checklist = ticketChecklists.find(c => c.ticketId === ticket.id);
+
+  if (!checklist) return null;
+
+  return (
+    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-6">
+        <ClipboardCheck className="h-5 w-5 text-blue-600" />
+        Job Checklist
+      </h4>
+      <div className="space-y-3">
+        {checklist.items.map(item => (
+          <div 
+            key={item.id} 
+            className={cn(
+              "flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer",
+              item.completed ? "bg-green-50 border-green-100" : "bg-gray-50 border-gray-100 hover:border-blue-200"
+            )}
+            onClick={() => updateChecklistItem(ticket.id, checklist.id, item.id, !item.completed)}
+          >
+            <div className={cn(
+              "mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-colors",
+              item.completed ? "bg-green-600 border-green-600 text-white" : "border-gray-300 bg-white"
+            )}>
+              {item.completed && <CheckCircle2 className="h-3.5 w-3.5" />}
+            </div>
+            <div className="flex-1">
+              <div className={cn(
+                "text-sm font-medium",
+                item.completed ? "text-green-900 line-through opacity-60" : "text-gray-900"
+              )}>
+                {item.label}
+                {item.required && <span className="text-red-500 ml-1">*</span>}
+              </div>
+              {item.description && (
+                <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+const WorkSessionControls: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
+  const { workSessions, startWorkSession, stopWorkSession, currentUser } = useApp();
+  const activeSession = workSessions.find(s => s.ticketId === ticket.id && s.technicianId === currentUser.id && s.status === 'active');
+
+  return (
+    <section className="rounded-2xl border border-blue-100 bg-blue-50/30 p-6 shadow-sm">
+      <h4 className="flex items-center gap-2 font-bold text-blue-900 mb-4">
+        <Clock className="h-5 w-5" />
+        Work Session Control
+      </h4>
+      
+      {activeSession ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+            <div>
+              <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Active Session</div>
+              <div className="text-lg font-bold text-gray-900 capitalize">{activeSession.sessionType}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xl font-mono font-bold text-blue-600 animate-pulse">
+                {formatDate(activeSession.startedAt)}
+              </div>
+              <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Started At</div>
+            </div>
+          </div>
+          <button 
+            onClick={() => stopWorkSession(activeSession.id)}
+            className="w-full flex items-center justify-center gap-2 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-100"
+          >
+            <Square className="h-5 w-5 fill-current" />
+            Stop Session
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => startWorkSession(ticket.id, 'travel')}
+            className="flex flex-col items-center gap-2 bg-white p-4 rounded-xl border border-blue-100 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+          >
+            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+              <MapPin className="h-5 w-5" />
+            </div>
+            <span className="text-xs font-bold text-gray-700">Start Travel</span>
+          </button>
+          <button 
+            onClick={() => startWorkSession(ticket.id, 'onsite')}
+            className="flex flex-col items-center gap-2 bg-white p-4 rounded-xl border border-blue-100 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+          >
+            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+              <Zap className="h-5 w-5" />
+            </div>
+            <span className="text-xs font-bold text-gray-700">Start On-Site</span>
+          </button>
+        </div>
+      )}
+    </section>
+  );
+};
+
 const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void }> = ({ ticket, currentTicket, handleChange, handleSave, handleStatusChange }) => {
   return (
     <div className="space-y-8">
@@ -611,9 +721,11 @@ const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; 
         <p className="text-gray-600 leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">{ticket.description}</p>
       </section>
 
-      <section className="rounded-2xl bg-blue-50 p-6 border border-blue-100 shadow-sm">
-        <h4 className="flex items-center gap-2 font-bold text-blue-900 mb-4">
-          <Wrench className="h-5 w-5" />
+      <WorkSessionControls ticket={ticket} />
+
+      <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200 shadow-sm">
+        <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">
+          <Wrench className="h-5 w-5 text-blue-600" />
           Field Status Controls
         </h4>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -642,6 +754,7 @@ const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; 
       </section>
 
       <div className="grid grid-cols-1 gap-8">
+        <ChecklistPanel ticket={ticket} />
         <PhotoGallery ticketId={ticket.id} />
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

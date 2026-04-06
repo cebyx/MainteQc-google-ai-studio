@@ -18,7 +18,17 @@ import { ClientMember, ClientAccount } from '../../types';
 import ClientMembersPanel from './ClientMembersPanel';
 
 const ClientTeamView: React.FC = () => {
-  const { clientAccount, clientMembers, clientInvitations, loading, inviteClientMember } = useApp();
+  const { 
+    clientAccount, 
+    clientMembers, 
+    clientInvitations, 
+    loading, 
+    inviteClientMember, 
+    resendInvitation, 
+    revokeInvitation,
+    clients,
+    role: userRole
+  } = useApp();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<ClientMember | undefined>(undefined);
 
@@ -52,14 +62,32 @@ const ClientTeamView: React.FC = () => {
     }
   };
 
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'bg-green-100 text-green-700 border-green-200';
+      case 'invited': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'pending': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'deactivated': return 'bg-red-100 text-red-700 border-red-200';
+      case 'accepted': return 'bg-green-100 text-green-700 border-green-200';
+      case 'revoked': return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'expired': return 'bg-red-100 text-red-700 border-red-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'active': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
-      case 'invited': return <Clock className="w-4 h-4 text-amber-500" />;
+      case 'invited':
+      case 'pending': return <Clock className="w-4 h-4 text-amber-500" />;
       case 'deactivated': return <XCircle className="w-4 h-4 text-red-500" />;
       default: return null;
     }
   };
+
+  const accountOwner = clients.find(c => c.id === clientAccount.ownerId);
+  const activeMembers = clientMembers.filter(m => m.status === 'active');
+  const pendingInvites = clientInvitations.filter(inv => inv.accountId === clientAccount.id && inv.status === 'pending');
 
   return (
     <div className="space-y-6">
@@ -80,8 +108,33 @@ const ClientTeamView: React.FC = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
+      {/* Account Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Account Owner</div>
+          <div className="font-bold text-gray-900 truncate">{accountOwner?.fullName || 'Unknown'}</div>
+          <div className="text-xs text-gray-500 truncate">{accountOwner?.email || 'No email'}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Active Members</div>
+          <div className="text-2xl font-bold text-gray-900">{activeMembers.length}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Pending Invites</div>
+          <div className="text-2xl font-bold text-gray-900">{pendingInvites.length}</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Account Status</div>
+          <div className="mt-1">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getStatusBadgeColor(clientAccount.status)}`}>
+              {clientAccount.status}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-gray-200 bg-gray-50/50 flex items-center justify-between">
               <h3 className="font-bold text-gray-900">Team Members</h3>
@@ -91,50 +144,54 @@ const ClientTeamView: React.FC = () => {
             </div>
             
             <div className="divide-y divide-gray-200">
-              {clientMembers.map((member) => (
-                <div key={member.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border border-gray-200">
-                      {member.clientId.substring(0, 2).toUpperCase()}
+              {clientMembers.map((member) => {
+                const memberInfo = clients.find(c => c.id === member.clientId);
+                return (
+                  <div key={member.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold border border-primary/20">
+                        {(memberInfo?.fullName || '??').substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{memberInfo?.fullName || `Member ${member.clientId.substring(0, 4)}`}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getRoleBadgeColor(member.role)}`}>
+                            {member.role}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <Mail className="w-3 h-3" />
+                            {memberInfo?.email || 'No email'}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            {getStatusIcon(member.status)}
+                            <span className="capitalize">{member.status}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">Member ID: {member.clientId.substring(0, 8)}</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getRoleBadgeColor(member.role)}`}>
-                          {member.role}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <div className="flex items-center gap-1 text-xs text-gray-500">
-                          <Mail className="w-3 h-3" />
-                          {member.status === 'invited' ? 'Invitation Pending' : 'Active Member'}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-gray-500">
-                          {getStatusIcon(member.status)}
-                          <span className="capitalize">{member.status}</span>
-                        </div>
-                      </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => {
+                          setSelectedMember(member);
+                          setIsPanelOpen(true);
+                        }}
+                        className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                        title="Member Settings"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => {
-                        setSelectedMember(member);
-                        setIsPanelOpen(true);
-                      }}
-                      className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               
-              {clientInvitations?.filter(inv => inv.accountId === clientAccount.id && inv.status === 'pending').map((invitation) => (
-                <div key={invitation.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group opacity-75">
+              {pendingInvites.map((invitation) => (
+                <div key={invitation.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group bg-amber-50/30">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border border-gray-200">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold border border-amber-200">
                       {invitation.email.substring(0, 2).toUpperCase()}
                     </div>
                     <div>
@@ -149,9 +206,9 @@ const ClientTeamView: React.FC = () => {
                           <Mail className="w-3 h-3" />
                           Invitation Sent
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-amber-500">
-                          <Clock className="w-4 h-4" />
-                          <span>Pending</span>
+                        <div className="flex items-center gap-1 text-xs text-amber-600 font-medium">
+                          <Clock className="w-3 h-3" />
+                          <span>Pending Acceptance</span>
                         </div>
                       </div>
                     </div>
@@ -159,15 +216,29 @@ const ClientTeamView: React.FC = () => {
                   
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => inviteClientMember(clientAccount.id, invitation.email, invitation.role)}
-                      className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                      onClick={() => resendInvitation(invitation.id)}
+                      className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
                       title="Resend Invitation"
                     >
                       <Mail className="w-4 h-4" />
                     </button>
+                    <button 
+                      onClick={() => revokeInvitation(invitation.id)}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                      title="Revoke Invitation"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
+
+              {clientMembers.length === 0 && pendingInvites.length === 0 && (
+                <div className="p-12 text-center">
+                  <Users className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                  <p className="text-gray-500">No team members yet. Start by inviting someone!</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

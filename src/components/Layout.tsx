@@ -20,7 +20,9 @@ import {
   BarChart3,
   Zap,
   Wrench,
-  Clock
+  Clock,
+  Package,
+  LayoutGrid
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -71,7 +73,10 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
   const techNav = [
     { id: 'today', label: 'Today', icon: Calendar },
     { id: 'my-jobs', label: 'My Jobs', icon: ClipboardList },
-    { id: 'records', label: 'Records Hub', icon: Zap },
+    { id: 'field-tools', label: 'Field Tools', icon: Zap },
+    { id: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'time', label: 'Time', icon: Clock },
+    { id: 'records', label: 'Records Hub', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'profile', label: 'Profile', icon: User },
   ];

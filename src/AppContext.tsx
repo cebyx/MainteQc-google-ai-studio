@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, 
   ActivityEvent, Attachment, MaterialUsed, ServiceSummary, ClientAccount, ClientMember, 
-  MaintenancePlan, RecurringGenerationLog, ApprovalRecord, PaymentRecord, ClientInvitation, ReminderEvent, AuthorizationRecord
+  MaintenancePlan, RecurringGenerationLog, ApprovalRecord, PaymentRecord, ClientInvitation, ReminderEvent, AuthorizationRecord,
+  WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction
 } from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -71,6 +72,13 @@ interface AppContextType {
   reminderEvents: ReminderEvent[];
   authorizationRecords: AuthorizationRecord[];
   recurringGenerationLog: RecurringGenerationLog[];
+  workSessions: WorkSession[];
+  inventoryItems: InventoryItem[];
+  technicianStock: TechnicianStock[];
+  partsRequests: PartsRequest[];
+  checklistTemplates: ChecklistTemplate[];
+  ticketChecklists: TicketChecklist[];
+  pendingSyncQueue: PendingSyncAction[];
   loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
@@ -119,8 +127,11 @@ interface AppContextType {
   updateClientMemberRole: (id: string, role: ClientMember['role']) => Promise<void>;
   removeClientMember: (id: string) => Promise<void>;
   inviteClientMember: (accountId: string, email: string, role: ClientMember['role']) => Promise<void>;
+  resendInvitation: (invitationId: string) => Promise<void>;
+  revokeInvitation: (invitationId: string) => Promise<void>;
   activateClientMember: (invitationToken: string) => Promise<void>;
   deactivateClientMember: (memberId: string) => Promise<void>;
+  reactivateClientMember: (memberId: string) => Promise<void>;
   getClientAccountPermissions: () => { canManageTeam: boolean; canApproveQuotes: boolean; canPayInvoices: boolean; isReadOnly: boolean };
   createMaintenancePlan: (plan: Omit<MaintenancePlan, 'id' | 'createdAt'>) => Promise<void>;
   updateMaintenancePlan: (id: string, updates: Partial<MaintenancePlan>) => Promise<void>;
@@ -131,6 +142,15 @@ interface AppContextType {
   approveQuoteWithAuthorization: (quoteId: string, authorization: { signatureName: string; notes: string; status: 'approved' | 'declined' }) => Promise<void>;
   createWorkAuthorization: (authData: Omit<AuthorizationRecord, 'id' | 'timestamp' | 'approvedByUserId' | 'approvedByName' | 'clientAccountId'>) => Promise<void>;
   generateRecurringTicket: (planId: string) => Promise<void>;
+  // Technician Operations
+  startWorkSession: (ticketId: string, sessionType: WorkSession['sessionType'], notes?: string) => Promise<void>;
+  stopWorkSession: (sessionId: string, notes?: string) => Promise<void>;
+  createPartsRequest: (request: Omit<PartsRequest, 'id' | 'technicianId' | 'createdAt' | 'updatedAt' | 'status'>) => Promise<void>;
+  updatePartsRequestStatus: (id: string, status: PartsRequest['status'], adminNotes?: string) => Promise<void>;
+  updateInventoryQuantity: (technicianId: string, itemId: string, delta: number) => Promise<void>;
+  updateChecklistItem: (ticketId: string, checklistId: string, itemId: string, completed: boolean, note?: string) => Promise<void>;
+  enqueuePendingSyncAction: (action: Omit<PendingSyncAction, 'id' | 'timestamp' | 'status'>) => void;
+  retryPendingSyncAction: (id: string) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -166,6 +186,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [reminderEvents, setReminderEvents] = useState<ReminderEvent[]>([]);
   const [authorizationRecords, setAuthorizationRecords] = useState<AuthorizationRecord[]>([]);
   const [recurringGenerationLog, setRecurringGenerationLog] = useState<RecurringGenerationLog[]>([]);
+  const [workSessions, setWorkSessions] = useState<WorkSession[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [technicianStock, setTechnicianStock] = useState<TechnicianStock[]>([]);
+  const [partsRequests, setPartsRequests] = useState<PartsRequest[]>([]);
+  const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>([]);
+  const [ticketChecklists, setTicketChecklists] = useState<TicketChecklist[]>([]);
+  const [pendingSyncQueue, setPendingSyncQueue] = useState<PendingSyncAction[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Test connection on boot
@@ -512,6 +539,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAuthorizationRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AuthorizationRecord)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'authorizationRecords'));
 
+    // Listen to Work Sessions
+    let sessionsQuery;
+    if (role === 'ADMIN') {
+      sessionsQuery = collection(db, 'workSessions');
+    } else if (role === 'TECHNICIAN') {
+      sessionsQuery = query(collection(db, 'workSessions'), where('technicianId', '==', currentUser.id));
+    } else {
+      sessionsQuery = null;
+    }
+    const unsubSessions = sessionsQuery ? onSnapshot(sessionsQuery, (snapshot) => {
+      setWorkSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkSession)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'workSessions')) : () => {};
+
+    // Listen to Inventory Items
+    const unsubInventory = onSnapshot(collection(db, 'inventoryItems'), (snapshot) => {
+      setInventoryItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'inventoryItems'));
+
+    // Listen to Technician Stock
+    let stockQuery;
+    if (role === 'ADMIN') {
+      stockQuery = collection(db, 'technicianStock');
+    } else if (role === 'TECHNICIAN') {
+      stockQuery = query(collection(db, 'technicianStock'), where('technicianId', '==', currentUser.id));
+    } else {
+      stockQuery = null;
+    }
+    const unsubStock = stockQuery ? onSnapshot(stockQuery, (snapshot) => {
+      setTechnicianStock(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TechnicianStock)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'technicianStock')) : () => {};
+
+    // Listen to Parts Requests
+    let requestsQuery;
+    if (role === 'ADMIN') {
+      requestsQuery = collection(db, 'partsRequests');
+    } else if (role === 'TECHNICIAN') {
+      requestsQuery = query(collection(db, 'partsRequests'), where('technicianId', '==', currentUser.id));
+    } else {
+      requestsQuery = null;
+    }
+    const unsubRequests = requestsQuery ? onSnapshot(requestsQuery, (snapshot) => {
+      setPartsRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PartsRequest)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'partsRequests')) : () => {};
+
+    // Listen to Checklist Templates
+    const unsubChecklistTemplates = onSnapshot(collection(db, 'checklistTemplates'), (snapshot) => {
+      setChecklistTemplates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChecklistTemplate)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'checklistTemplates'));
+
+    // Listen to Ticket Checklists
+    const unsubTicketChecklists = onSnapshot(collection(db, 'ticketChecklists'), (snapshot) => {
+      setTicketChecklists(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TicketChecklist)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'ticketChecklists'));
+
     setLoading(false);
 
     return () => {
@@ -535,6 +616,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubReminders();
       unsubLog();
       unsubAuthRecords();
+      unsubSessions();
+      unsubInventory();
+      unsubStock();
+      unsubRequests();
+      unsubChecklistTemplates();
+      unsubTicketChecklists();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -1557,6 +1644,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const inviteClientMember = async (accountId: string, email: string, role: ClientMember['role']) => {
     try {
+      // Check if already invited
+      const existing = clientInvitations.find(inv => inv.accountId === accountId && inv.email === email && inv.status === 'pending');
+      if (existing) {
+        await resendInvitation(existing.id);
+        return;
+      }
+
       const invitation: Omit<ClientInvitation, 'id'> = {
         accountId,
         email,
@@ -1569,6 +1663,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await addDoc(collection(db, 'clientInvitations'), invitation);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'clientInvitations');
+    }
+  };
+
+  const resendInvitation = async (invitationId: string) => {
+    try {
+      await updateDoc(doc(db, 'clientInvitations', invitationId), {
+        invitedAt: new Date().toISOString(),
+        invitedBy: currentUser.id
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clientInvitations/${invitationId}`);
+    }
+  };
+
+  const revokeInvitation = async (invitationId: string) => {
+    try {
+      await updateDoc(doc(db, 'clientInvitations', invitationId), {
+        status: 'revoked'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clientInvitations/${invitationId}`);
     }
   };
 
@@ -1596,6 +1711,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         acceptedAt: new Date().toISOString(),
         acceptedByClientId: currentUser.id
       });
+
+      // Update user's accountId if not set
+      if (!currentUser.accountId) {
+        await updateDoc(doc(db, 'users', currentUser.id), { accountId: invitation.accountId });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'clientInvitations');
     }
@@ -1604,6 +1724,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deactivateClientMember = async (memberId: string) => {
     try {
       await updateDoc(doc(db, 'clientMembers', memberId), { status: 'deactivated' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clientMembers/${memberId}`);
+    }
+  };
+
+  const reactivateClientMember = async (memberId: string) => {
+    try {
+      await updateDoc(doc(db, 'clientMembers', memberId), { status: 'active' });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `clientMembers/${memberId}`);
     }
@@ -1700,21 +1828,220 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Technician Operations Implementation
+  const startWorkSession = async (ticketId: string, sessionType: WorkSession['sessionType'], notes: string = '') => {
+    try {
+      // Check if there's already an active session for this technician
+      const activeSession = workSessions.find(s => s.technicianId === currentUser.id && s.status === 'active');
+      if (activeSession) {
+        await stopWorkSession(activeSession.id, 'Automatically stopped for new session');
+      }
+
+      const newSession: Omit<WorkSession, 'id'> = {
+        ticketId,
+        technicianId: currentUser.id,
+        startedAt: new Date().toISOString(),
+        sessionType,
+        notes,
+        status: 'active',
+      };
+
+      await addDoc(collection(db, 'workSessions'), newSession);
+
+      // Update ticket status based on session type
+      if (sessionType === 'travel') {
+        await updateTicket(ticketId, { status: 'on_the_way' });
+      } else if (sessionType === 'onsite') {
+        await updateTicket(ticketId, { status: 'in_progress' });
+      }
+
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'workSessions');
+    }
+  };
+
+  const stopWorkSession = async (sessionId: string, notes: string = '') => {
+    try {
+      const session = workSessions.find(s => s.id === sessionId);
+      if (!session) return;
+
+      const endedAt = new Date().toISOString();
+      const durationMinutes = Math.round((new Date(endedAt).getTime() - new Date(session.startedAt).getTime()) / 60000);
+
+      await updateDoc(doc(db, 'workSessions', sessionId), {
+        endedAt,
+        durationMinutes,
+        notes: session.notes ? `${session.notes}\n${notes}` : notes,
+        status: 'completed',
+      });
+
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `workSessions/${sessionId}`);
+    }
+  };
+
+  const createPartsRequest = async (request: Omit<PartsRequest, 'id' | 'technicianId' | 'createdAt' | 'updatedAt' | 'status'>) => {
+    try {
+      const newRequest: Omit<PartsRequest, 'id'> = {
+        ...request,
+        technicianId: currentUser.id,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await addDoc(collection(db, 'partsRequests'), newRequest);
+
+      await logActivity({
+        ticketId: request.ticketId,
+        clientId: tickets.find(t => t.id === request.ticketId)?.clientId || '',
+        type: 'status_changed',
+        description: `Parts request created for ${request.items.length} items`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'partsRequests');
+    }
+  };
+
+  const updatePartsRequestStatus = async (id: string, status: PartsRequest['status'], adminNotes?: string) => {
+    try {
+      await updateDoc(doc(db, 'partsRequests', id), {
+        status,
+        adminNotes,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `partsRequests/${id}`);
+    }
+  };
+
+  const updateInventoryQuantity = async (technicianId: string, itemId: string, delta: number) => {
+    try {
+      const stockItem = technicianStock.find(s => s.technicianId === technicianId && s.itemId === itemId);
+      if (stockItem) {
+        await updateDoc(doc(db, 'technicianStock', stockItem.id), {
+          quantity: Math.max(0, stockItem.quantity + delta),
+          lastRestockedAt: delta > 0 ? new Date().toISOString() : stockItem.lastRestockedAt,
+        });
+      } else if (delta > 0) {
+        await addDoc(collection(db, 'technicianStock'), {
+          technicianId,
+          itemId,
+          quantity: delta,
+          minThreshold: 5,
+          lastRestockedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'technicianStock');
+    }
+  };
+
+  const updateChecklistItem = async (ticketId: string, checklistId: string, itemId: string, completed: boolean, note?: string) => {
+    // Optimistic update
+    setTicketChecklists(prev => prev.map(c => {
+      if (c.id === checklistId) {
+        const updatedItems = c.items.map(item => 
+          item.id === itemId 
+            ? { 
+                ...item, 
+                completed, 
+                completedAt: completed ? new Date().toISOString() : undefined,
+                completedBy: completed ? currentUser?.fullName : undefined,
+                note: note ?? item.note
+              } 
+            : item
+        );
+        const allCompleted = updatedItems.every(item => item.completed || !item.required);
+        return {
+          ...c,
+          items: updatedItems,
+          status: allCompleted ? 'completed' : 'in_progress',
+          completedAt: allCompleted ? new Date().toISOString() : undefined,
+        };
+      }
+      return c;
+    }));
+
+    try {
+      const checklist = ticketChecklists.find(c => c.id === checklistId);
+      if (!checklist) return;
+
+      const updatedItems = checklist.items.map(item => 
+        item.id === itemId 
+          ? { ...item, completed, completedAt: completed ? new Date().toISOString() : undefined, completedBy: completed ? currentUser.id : undefined, note: note || item.note }
+          : item
+      );
+
+      const allCompleted = updatedItems.every(item => !item.required || item.completed);
+
+      await updateDoc(doc(db, 'ticketChecklists', checklistId), {
+        items: updatedItems,
+        status: allCompleted ? 'completed' : 'in_progress',
+        completedAt: allCompleted ? new Date().toISOString() : undefined,
+      });
+
+    } catch (error) {
+      console.error('Error updating checklist item:', error);
+      enqueuePendingSyncAction('checklist_item', { ticketId, checklistId, itemId, completed, note });
+    }
+  };
+
+  const enqueuePendingSyncAction = (action: Omit<PendingSyncAction, 'id' | 'timestamp' | 'status'>) => {
+    const newAction: PendingSyncAction = {
+      ...action,
+      id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      status: 'pending',
+    };
+    setPendingSyncQueue(prev => [...prev, newAction]);
+    
+    // Save to localStorage for persistence
+    const saved = localStorage.getItem('pendingSyncQueue');
+    const queue = saved ? JSON.parse(saved) : [];
+    localStorage.setItem('pendingSyncQueue', JSON.stringify([...queue, newAction]));
+  };
+
+  const retryPendingSyncAction = async (id: string) => {
+    const action = pendingSyncQueue.find(a => a.id === id);
+    if (!action) return;
+
+    try {
+      // Implement retry logic based on action type
+      // For now, we'll just simulate success and remove from queue
+      setPendingSyncQueue(prev => prev.filter(a => a.id !== id));
+      const saved = localStorage.getItem('pendingSyncQueue');
+      if (saved) {
+        const queue = JSON.parse(saved);
+        localStorage.setItem('pendingSyncQueue', JSON.stringify(queue.filter((a: any) => a.id !== id)));
+      }
+    } catch (error) {
+      console.error('Sync retry failed', error);
+      setPendingSyncQueue(prev => prev.map(a => a.id === id ? { ...a, status: 'failed', error: String(error) } : a));
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages, activities,
       attachments, materialsUsed, serviceSummaries,
       clientAccounts, clientAccount, clientMembers, clientInvitations, maintenancePlans, paymentRecords, approvalRecords, reminderEvents, authorizationRecords, recurringGenerationLog,
+      workSessions, inventoryItems, technicianStock, partsRequests, checklistTemplates, ticketChecklists, pendingSyncQueue,
       loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
       saveServiceSummary, updateServiceSummary,
       sendQuoteReminder, sendInvoiceReminder, updateCollectionsStatus, markDocumentAsViewed, markDocumentAsExported,
       createClientAccount, updateClientAccount, createClientMember, updateClientMemberRole, removeClientMember,
-      inviteClientMember, activateClientMember, deactivateClientMember, getClientAccountPermissions,
+      inviteClientMember, resendInvitation, revokeInvitation, activateClientMember, deactivateClientMember, reactivateClientMember, getClientAccountPermissions,
       createMaintenancePlan, updateMaintenancePlan, deleteMaintenancePlan,
       recordPayment, listPaymentRecords, sendPaymentReminder, approveQuoteWithAuthorization, createWorkAuthorization, generateRecurringTicket,
+      startWorkSession, stopWorkSession, createPartsRequest, updatePartsRequestStatus, updateInventoryQuantity, updateChecklistItem, enqueuePendingSyncAction, retryPendingSyncAction,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import { FileText, Download, Eye, Search, Filter, Calendar, CheckCircle, Clock, AlertCircle, FileCheck, FileWarning, FileMinus, ExternalLink } from 'lucide-react';
+import { FileText, Download, Eye, Search, Filter, Calendar, CheckCircle, Clock, AlertCircle, FileCheck, FileWarning, FileMinus, ExternalLink, ShieldCheck, DollarSign, Bell, XCircle } from 'lucide-react';
 import { Ticket, Quote, Invoice, ServiceSummary, Attachment } from '../types';
 import { cn, formatDate } from '../lib/utils';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 
 export const DocumentsCenter: React.FC = () => {
-  const { tickets, quotes, invoices, serviceSummaries, attachments, currentUser, role, brand, markDocumentAsViewed, markDocumentAsExported } = useApp();
+  const { 
+    tickets, quotes, invoices, serviceSummaries, attachments, 
+    currentUser, role, brand, markDocumentAsViewed, markDocumentAsExported,
+    authorizationRecords, paymentRecords, reminderEvents
+  } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'quote' | 'invoice' | 'summary' | 'attachment'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'quote' | 'invoice' | 'summary' | 'attachment' | 'authorization' | 'payment' | 'reminder'>('all');
   
   const [previewModal, setPreviewModal] = useState<{
     isOpen: boolean;
-    type: 'quote' | 'invoice' | 'summary';
+    type: 'quote' | 'invoice' | 'summary' | 'authorization' | 'payment' | 'reminder';
     data: any;
   }>({
     isOpen: false,
@@ -27,12 +31,23 @@ export const DocumentsCenter: React.FC = () => {
   const visibleInvoices = isAdmin ? invoices : invoices.filter(i => i.clientId === currentUser.id && i.status !== 'draft');
   const visibleSummaries = isAdmin || isTech ? serviceSummaries : serviceSummaries.filter(s => s.isSharedWithClient && tickets.find(t => t.id === s.ticketId)?.clientId === currentUser.id);
   const visibleAttachments = isAdmin || isTech ? attachments : attachments.filter(a => a.isVisibleToClient && tickets.find(t => t.id === a.ticketId)?.clientId === currentUser.id);
+  const visibleAuthorizations = isAdmin ? authorizationRecords : authorizationRecords.filter(r => r.clientId === currentUser.id);
+  const visiblePayments = isAdmin ? paymentRecords : paymentRecords.filter(p => p.clientId === currentUser.id);
+  const visibleReminders = isAdmin ? reminderEvents : reminderEvents.filter(r => invoices.find(i => i.id === r.invoiceId)?.clientId === currentUser.id || quotes.find(q => q.id === r.targetId)?.clientId === currentUser.id);
 
   const allDocs = [
     ...visibleQuotes.map(q => ({ id: q.id, type: 'quote' as const, title: `Quote #${q.id.slice(-6)}`, date: q.createdAt, status: q.status, total: q.total, ticketId: q.ticketId, data: q })),
     ...visibleInvoices.map(i => ({ id: i.id, type: 'invoice' as const, title: `Invoice #${i.id.slice(-6)}`, date: i.createdAt, status: i.status, total: i.total, ticketId: i.ticketId, data: i })),
     ...visibleSummaries.map(s => ({ id: s.id, type: 'summary' as const, title: `Service Summary #${s.ticketId.slice(-6)}`, date: s.completionTimestamp, status: 'completed', ticketId: s.ticketId, total: undefined, data: s })),
-    ...visibleAttachments.map(a => ({ id: a.id, type: 'attachment' as const, title: a.fileName, date: a.timestamp, status: 'uploaded', url: a.url, ticketId: a.ticketId, total: undefined, data: a }))
+    ...visibleAttachments.map(a => ({ id: a.id, type: 'attachment' as const, title: a.fileName, date: a.timestamp, status: 'uploaded', url: a.url, ticketId: a.ticketId, total: undefined, data: a })),
+    ...visibleAuthorizations.map(r => ({ id: r.id, type: 'authorization' as const, title: `Authorization: ${r.type.replace('_', ' ')}`, date: r.timestamp, status: r.status, ticketId: r.ticketId, total: undefined, data: r })),
+    ...visiblePayments.map(p => ({ id: p.id, type: 'payment' as const, title: `Payment: ${p.method.replace('_', ' ')}`, date: p.timestamp, status: p.status, ticketId: p.ticketId, total: p.amount, data: p })),
+    ...visibleReminders.map(r => {
+      const relatedTicketId = r.targetType === 'invoice' 
+        ? invoices.find(i => i.id === r.targetId)?.ticketId 
+        : quotes.find(q => q.id === r.targetId)?.ticketId;
+      return { id: r.id, type: 'reminder' as const, title: `Reminder: ${r.type.replace('_', ' ')}`, date: r.timestamp, status: 'sent', ticketId: relatedTicketId || '', total: undefined, data: r };
+    })
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const filteredDocs = allDocs.filter(doc => {
@@ -72,9 +87,9 @@ export const DocumentsCenter: React.FC = () => {
   };
 
   const getStatusIcon = (type: string, status: string) => {
-    if (status === 'paid' || status === 'accepted' || status === 'completed') return <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />;
-    if (status === 'unpaid' || status === 'sent') return <Clock className="w-3.5 h-3.5 text-blue-500" />;
-    if (status === 'declined' || status === 'overdue') return <AlertCircle className="w-3.5 h-3.5 text-rose-500" />;
+    if (status === 'paid' || status === 'accepted' || status === 'completed' || status === 'approved') return <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />;
+    if (status === 'unpaid' || status === 'sent' || status === 'pending') return <Clock className="w-3.5 h-3.5 text-blue-500" />;
+    if (status === 'declined' || status === 'overdue' || status === 'failed' || status === 'revoked') return <AlertCircle className="w-3.5 h-3.5 text-rose-500" />;
     return <FileText className="w-3.5 h-3.5 text-gray-400" />;
   };
 
@@ -84,6 +99,9 @@ export const DocumentsCenter: React.FC = () => {
       case 'invoice': return <FileWarning className="w-4 h-4 text-amber-500" />;
       case 'summary': return <CheckCircle className="w-4 h-4 text-emerald-500" />;
       case 'attachment': return <FileMinus className="w-4 h-4 text-purple-500" />;
+      case 'authorization': return <ShieldCheck className="w-4 h-4 text-indigo-500" />;
+      case 'payment': return <DollarSign className="w-4 h-4 text-green-500" />;
+      case 'reminder': return <Bell className="w-4 h-4 text-rose-500" />;
       default: return <FileText className="w-4 h-4 text-gray-400" />;
     }
   };
@@ -107,13 +125,13 @@ export const DocumentsCenter: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
-            {(['all', 'quote', 'invoice', 'summary', 'attachment'] as const).map((type) => (
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1 overflow-x-auto max-w-[400px] no-scrollbar">
+            {(['all', 'quote', 'invoice', 'summary', 'attachment', 'authorization', 'payment', 'reminder'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
                 className={cn(
-                  "px-3 py-1.5 text-xs font-bold rounded-lg transition-all capitalize",
+                  "px-3 py-1.5 text-xs font-bold rounded-lg transition-all capitalize whitespace-nowrap",
                   filterType === type ? "bg-gray-900 text-white shadow-sm" : "text-gray-500 hover:text-gray-900"
                 )}
               >
@@ -145,7 +163,7 @@ export const DocumentsCenter: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <h4 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{doc.title}</h4>
-                    {doc.data.viewedAt && (
+                    {(doc.data as any).viewedAt && (
                       <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-wider">Viewed</span>
                     )}
                   </div>
@@ -167,7 +185,7 @@ export const DocumentsCenter: React.FC = () => {
                       </span>
                     )}
                     <span className="text-gray-300">|</span>
-                    <span className="font-medium">Ticket #{doc.ticketId.slice(-6)}</span>
+                    <span className="font-medium">Ticket #{doc.ticketId?.slice(-6) || 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -199,7 +217,7 @@ export const DocumentsCenter: React.FC = () => {
         type={previewModal.type}
         data={previewModal.data}
         brand={brand}
-        onExport={() => markDocumentAsExported(previewModal.type, previewModal.data.id)}
+        onExport={() => markDocumentAsExported(previewModal.type as any, previewModal.data.id)}
       />
     </div>
   );

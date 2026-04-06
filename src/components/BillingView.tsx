@@ -200,144 +200,14 @@ export const BillingView: React.FC = () => {
 
   const sortedReminders = [...reminderEvents].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-  const renderQuotes = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-gray-900">Quotes & Estimates</h3>
-        {role === 'ADMIN' && (
-          <button 
-            onClick={() => setShowQuoteModal(true)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
-          >
-            Create Quote
-          </button>
-        )}
-      </div>
-      {quotes.length === 0 ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">No quotes found.</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {quotes.map(quote => (
-            <div key={quote.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <div className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
-                  quote.status === 'accepted' ? "bg-emerald-100 text-emerald-700" : 
-                  quote.status === 'declined' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
-                )}>
-                  {quote.status}
-                </div>
-                <span className="text-xs text-gray-400">#{quote.id.slice(-6)}</span>
-              </div>
-              <div className="mb-4">
-                <div className="text-2xl font-black text-gray-900">{formatCurrency(quote.total)}</div>
-                <div className="text-xs text-gray-500">Estimate for Ticket #{quote.ticketId.slice(-4)}</div>
-              </div>
-              <div className="space-y-2 border-t border-gray-50 pt-4">
-                {quote.lineItems.map((item, i) => (
-                  <div key={i} className="flex justify-between text-xs">
-                    <span className="text-gray-600">{item.description}</span>
-                    <span className="font-medium text-gray-900">{formatCurrency(item.total)}</span>
-                  </div>
-                ))}
-              </div>
-              {role === 'CLIENT' && quote.status === 'sent' && (
-                <div className="mt-6 flex gap-2">
-                  <button 
-                    onClick={() => handleQuoteAction(quote.id, 'accepted')}
-                    disabled={isProcessing === `quote-${quote.id}`}
-                    className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white disabled:opacity-50"
-                  >
-                    Accept
-                  </button>
-                  <button 
-                    onClick={() => handleQuoteAction(quote.id, 'declined')}
-                    disabled={isProcessing === `quote-${quote.id}`}
-                    className="flex-1 rounded-xl border border-red-200 bg-red-50 py-2 text-xs font-bold text-red-600 disabled:opacity-50"
-                  >
-                    Decline
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  const renderInvoices = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-gray-900">Invoices</h3>
-        {role === 'ADMIN' && (
-          <button 
-            onClick={() => setShowInvoiceModal(true)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
-          >
-            New Invoice
-          </button>
-        )}
-      </div>
-      {invoices.length === 0 ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">No invoices found.</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {invoices.map(invoice => (
-            <div key={invoice.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <div className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
-                  invoice.status === 'paid' ? "bg-emerald-100 text-emerald-700" : 
-                  invoice.status === 'overdue' ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
-                )}>
-                  {invoice.status}
-                </div>
-                <span className="text-xs text-gray-400">#{invoice.id.slice(-6)}</span>
-              </div>
-              <div className="mb-4">
-                <div className="text-2xl font-black text-gray-900">{formatCurrency(invoice.total)}</div>
-                <div className="text-xs text-gray-500">Due: {formatDate(invoice.dueDate)}</div>
-              </div>
-              <div className="mt-6">
-                {invoice.status === 'unpaid' && role === 'CLIENT' ? (
-                  <button 
-                    onClick={() => handleInvoiceAction(invoice.id, 'paid', 'Credit Card')}
-                    disabled={isProcessing === `invoice-${invoice.id}`}
-                    className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 disabled:opacity-50"
-                  >
-                    {isProcessing === `invoice-${invoice.id}` ? 'Processing...' : 'Pay Now'}
-                  </button>
-                ) : invoice.status === 'unpaid' && role === 'ADMIN' ? (
-                  <button 
-                    onClick={() => handleInvoiceAction(invoice.id, 'paid', 'Manual Entry')}
-                    disabled={isProcessing === `invoice-${invoice.id}`}
-                    className="w-full rounded-xl bg-gray-100 py-3 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-                  >
-                    {isProcessing === `invoice-${invoice.id}` ? 'Processing...' : 'Mark as Paid'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    {invoice.status === 'paid' ? `Paid via ${invoice.paymentMethod || 'Unknown'}` : 'Awaiting Payment'}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-gray-900 tracking-tight">Billing & Financials</h2>
           <p className="text-sm text-gray-500 font-medium tracking-tight">Manage quotes, invoices, and payments.</p>
         </div>
-        <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+        <div className="flex gap-2 bg-gray-100 p-1 rounded-xl self-start sm:self-auto">
           <button
             onClick={() => setActiveTab('quotes')}
             className={cn(
@@ -370,78 +240,248 @@ export const BillingView: React.FC = () => {
         </div>
       </div>
 
-      {activeTab === 'quotes' && renderQuotes()}
-      {activeTab === 'invoices' && (
+      {/* Financial Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-100 p-5 rounded-3xl shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-blue-50 rounded-xl">
+              <FileText className="w-4 h-4 text-blue-600" />
+            </div>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pending Quotes</span>
+          </div>
+          <div className="text-2xl font-black text-gray-900">
+            {quotes.filter(q => q.status === 'sent').length}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest">
+            Total Value: ${quotes.filter(q => q.status === 'sent').reduce((acc, q) => acc + q.total, 0).toLocaleString()}
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-100 p-5 rounded-3xl shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-amber-50 rounded-xl">
+              <Clock className="w-4 h-4 text-amber-600" />
+            </div>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Unpaid Invoices</span>
+          </div>
+          <div className="text-2xl font-black text-gray-900">
+            {invoices.filter(i => i.status === 'unpaid').length}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest">
+            Outstanding: ${invoices.filter(i => i.status === 'unpaid').reduce((acc, i) => acc + i.total, 0).toLocaleString()}
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-100 p-5 rounded-3xl shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-rose-50 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+            </div>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Overdue</span>
+          </div>
+          <div className="text-2xl font-black text-gray-900">
+            {invoices.filter(i => i.status === 'overdue').length}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest text-rose-500">
+            Critical: ${invoices.filter(i => i.status === 'overdue').reduce((acc, i) => acc + i.total, 0).toLocaleString()}
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-100 p-5 rounded-3xl shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-emerald-50 rounded-xl">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            </div>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Paid (30d)</span>
+          </div>
+          <div className="text-2xl font-black text-gray-900">
+            {invoices.filter(i => i.status === 'paid').length}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest text-emerald-500">
+            Revenue: ${invoices.filter(i => i.status === 'paid').reduce((acc, i) => acc + i.total, 0).toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {activeTab === 'quotes' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-900">Invoices</h3>
+            <h3 className="text-lg font-bold text-gray-900">Quotes & Estimates</h3>
             {role === 'ADMIN' && (
               <button 
-                onClick={() => setShowInvoiceModal(true)}
+                onClick={() => setShowQuoteModal(true)}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
               >
-                New Invoice
+                Create Quote
               </button>
             )}
           </div>
-          {invoices.length === 0 ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">No invoices found.</div>
+          {quotes.length === 0 ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">No quotes found.</div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {invoices.map(invoice => (
-                <div key={invoice.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              {quotes.map(quote => (
+                <div key={quote.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm group hover:border-blue-200 transition-all">
                   <div className="mb-4 flex items-center justify-between">
                     <div className={cn(
                       "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
-                      invoice.status === 'paid' ? "bg-emerald-100 text-emerald-700" : 
-                      invoice.status === 'overdue' ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                      quote.status === 'accepted' ? "bg-emerald-100 text-emerald-700" : 
+                      quote.status === 'declined' ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
                     )}>
-                      {invoice.status}
+                      {quote.status}
                     </div>
-                    <span className="text-xs text-gray-400">#{invoice.id.slice(-6)}</span>
+                    <span className="text-xs text-gray-400">#{quote.id.slice(-6)}</span>
                   </div>
                   <div className="mb-4">
-                    <div className="text-2xl font-black text-gray-900">{formatCurrency(invoice.total)}</div>
-                    <div className="text-xs text-gray-500">Due: {formatDate(invoice.dueDate)}</div>
+                    <div className="text-2xl font-black text-gray-900">{formatCurrency(quote.total)}</div>
+                    <div className="text-xs text-gray-500">Estimate for Ticket #{quote.ticketId.slice(-4)}</div>
                   </div>
-                  <div className="mt-6 flex flex-col gap-2">
-                    {invoice.status === 'unpaid' && role === 'CLIENT' ? (
-                      <button 
-                        onClick={() => handleInvoiceAction(invoice.id, 'paid', 'Credit Card')}
-                        disabled={isProcessing === `invoice-${invoice.id}`}
-                        className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 disabled:opacity-50"
-                      >
-                        {isProcessing === `invoice-${invoice.id}` ? 'Processing...' : 'Pay Now'}
-                      </button>
-                    ) : invoice.status === 'unpaid' && role === 'ADMIN' ? (
-                      <>
-                        <button 
-                          onClick={() => handleInvoiceAction(invoice.id, 'paid', 'Manual Entry')}
-                          disabled={isProcessing === `invoice-${invoice.id}`}
-                          className="w-full rounded-xl bg-gray-100 py-3 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-                        >
-                          {isProcessing === `invoice-${invoice.id}` ? 'Processing...' : 'Mark as Paid'}
-                        </button>
-                        <button 
-                          onClick={() => handleSendReminder(invoice.id)}
-                          disabled={isProcessing === `reminder-${invoice.id}`}
-                          className="w-full rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          <Bell className="h-4 w-4" />
-                          {isProcessing === `reminder-${invoice.id}` ? 'Sending...' : 'Send Reminder'}
-                        </button>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        {invoice.status === 'paid' ? `Paid via ${invoice.paymentMethod || 'Unknown'}` : 'Awaiting Payment'}
+                  <div className="space-y-2 border-t border-gray-50 pt-4">
+                    {quote.lineItems.map((item, i) => (
+                      <div key={i} className="flex justify-between text-xs">
+                        <span className="text-gray-600">{item.description}</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(item.total)}</span>
                       </div>
-                    )}
+                    ))}
                   </div>
+                  {role === 'CLIENT' && quote.status === 'sent' && (
+                    <div className="mt-6 flex gap-2">
+                      <button 
+                        onClick={() => handleQuoteAction(quote.id, 'accepted')}
+                        disabled={isProcessing === `quote-${quote.id}`}
+                        className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white disabled:opacity-50 active:scale-95 transition-transform"
+                      >
+                        Accept
+                      </button>
+                      <button 
+                        onClick={() => handleQuoteAction(quote.id, 'declined')}
+                        disabled={isProcessing === `quote-${quote.id}`}
+                        className="flex-1 rounded-xl border border-red-200 bg-red-50 py-2 text-xs font-bold text-red-600 disabled:opacity-50 active:scale-95 transition-transform"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+      
+      {activeTab === 'invoices' && (
+        <div className="space-y-8">
+          {/* Active Invoices Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">Active Invoices</h3>
+              {role === 'ADMIN' && (
+                <button 
+                  onClick={() => setShowInvoiceModal(true)}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
+                >
+                  New Invoice
+                </button>
+              )}
+            </div>
+            {invoices.length === 0 ? (
+              <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">No invoices found.</div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {invoices.map(invoice => (
+                  <div key={invoice.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm group hover:border-blue-200 transition-all">
+                    <div className="mb-4 flex items-center justify-between">
+                      <div className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
+                        invoice.status === 'paid' ? "bg-emerald-100 text-emerald-700" : 
+                        invoice.status === 'overdue' ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                      )}>
+                        {invoice.status}
+                      </div>
+                      <span className="text-xs text-gray-400">#{invoice.id.slice(-6)}</span>
+                    </div>
+                    <div className="mb-4">
+                      <div className="text-2xl font-black text-gray-900">{formatCurrency(invoice.total)}</div>
+                      <div className="text-xs text-gray-500">Due: {formatDate(invoice.dueDate)}</div>
+                    </div>
+                    <div className="mt-6 flex flex-col gap-2">
+                      {invoice.status === 'unpaid' && role === 'CLIENT' ? (
+                        <button 
+                          onClick={() => handleInvoiceAction(invoice.id, 'paid', 'Credit Card')}
+                          disabled={isProcessing === `invoice-${invoice.id}`}
+                          className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 disabled:opacity-50 active:scale-95 transition-transform"
+                        >
+                          {isProcessing === `invoice-${invoice.id}` ? 'Processing...' : 'Pay Now'}
+                        </button>
+                      ) : invoice.status === 'unpaid' && role === 'ADMIN' ? (
+                        <>
+                          <button 
+                            onClick={() => handleInvoiceAction(invoice.id, 'paid', 'Manual Entry')}
+                            disabled={isProcessing === `invoice-${invoice.id}`}
+                            className="w-full rounded-xl bg-gray-100 py-3 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            {isProcessing === `invoice-${invoice.id}` ? 'Processing...' : 'Mark as Paid'}
+                          </button>
+                          <button 
+                            onClick={() => handleSendReminder(invoice.id)}
+                            disabled={isProcessing === `reminder-${invoice.id}`}
+                            className="w-full rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <Bell className="h-4 w-4" />
+                            {isProcessing === `reminder-${invoice.id}` ? 'Sending...' : 'Send Reminder'}
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          {invoice.status === 'paid' ? `Paid via ${invoice.paymentMethod || 'Unknown'}` : 'Awaiting Payment'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Payment History Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-gray-900">Recent Payments</h3>
+            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Invoice</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Method</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Reference</th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invoices.filter(i => i.status === 'paid').map(invoice => (
+                    <tr key={invoice.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 text-xs font-medium text-gray-600">{formatDate(invoice.createdAt)}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-gray-900">#{invoice.id.slice(-6).toUpperCase()}</td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">
+                          <CreditCard className="w-3 h-3" />
+                          {invoice.paymentMethod || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-mono text-gray-400">REF-{invoice.id.slice(0, 8).toUpperCase()}</td>
+                      <td className="px-6 py-4 text-sm font-black text-gray-900 text-right">{formatCurrency(invoice.total)}</td>
+                    </tr>
+                  ))}
+                  {invoices.filter(i => i.status === 'paid').length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-400">No payment history available.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

@@ -10,15 +10,31 @@ import {
   AlertCircle,
   MessageSquare,
   History,
-  Navigation
+  Navigation,
+  Zap,
+  Package,
+  ClipboardCheck,
+  Play,
+  Square
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
 import { TicketDetail } from './TicketDetail';
-import { Ticket, ActivityEvent, Message } from '../types';
+import { Ticket, ActivityEvent, Message, WorkSession } from '../types';
+import { motion } from 'motion/react';
 
 export const TechnicianDashboard: React.FC = () => {
-  const { tickets, currentUser, activities, messages, updateTicket } = useApp();
+  const { 
+    tickets, 
+    currentUser, 
+    activities, 
+    messages, 
+    updateTicket, 
+    workSessions, 
+    startWorkSession, 
+    stopWorkSession,
+    ticketChecklists
+  } = useApp();
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // Filter jobs assigned to this technician
@@ -27,10 +43,18 @@ export const TechnicianDashboard: React.FC = () => {
   const todayJobs = myJobs.filter(t => t.scheduledDate === todayStr && t.status !== 'completed');
   const completedToday = myJobs.filter(t => t.scheduledDate === todayStr && t.status === 'completed').length;
   
-  // Active job (in progress)
-  const activeJob = myJobs.find(t => t.status === 'in_progress');
+  // Active session from AppContext
+  const activeSession = workSessions.find(s => s.technicianId === currentUser.id && s.status === 'active');
+  const activeJob = activeSession ? tickets.find(t => t.id === activeSession.ticketId) : null;
   
-  // Recent Activity
+  // Next job (first job today that isn't active or completed)
+  const nextJob = todayJobs.find(j => j.id !== activeJob?.id && j.status !== 'completed');
+
+  // Pending Checklists
+  const pendingChecklists = ticketChecklists.filter(c => 
+    c.status !== 'completed' && 
+    myJobs.some(t => t.id === c.ticketId)
+  );
   const myActivities = activities
     .filter(a => myJobs.some(t => t.id === a.ticketId))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -69,13 +93,13 @@ export const TechnicianDashboard: React.FC = () => {
       </div>
 
       {/* Active Job Focus */}
-      {activeJob && (
+      {activeSession && activeJob ? (
         <div className="relative overflow-hidden rounded-3xl bg-indigo-900 p-6 text-white shadow-xl">
           <div className="relative z-10">
             <div className="mb-4 flex items-center justify-between">
               <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/30 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-100 backdrop-blur-sm">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400"></span>
-                Currently In Progress
+                {activeSession.sessionType === 'travel' ? 'Currently Traveling' : 'Currently On Site'}
               </span>
               <UrgencyBadge urgency={activeJob.urgency} />
             </div>
@@ -97,10 +121,11 @@ export const TechnicianDashboard: React.FC = () => {
                 View Job Details
               </button>
               <button 
-                onClick={() => updateTicket(activeJob.id, { status: 'completed' })}
-                className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white shadow-lg transition-transform active:scale-95"
+                onClick={() => stopWorkSession(activeSession.id)}
+                className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
               >
-                Complete Job
+                <Square className="h-4 w-4 fill-current" />
+                Stop Session
               </button>
               <a 
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.serviceAddress)}`}
@@ -114,7 +139,74 @@ export const TechnicianDashboard: React.FC = () => {
           </div>
           <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-indigo-500/20 blur-3xl"></div>
         </div>
-      )}
+      ) : nextJob ? (
+        <div className="rounded-3xl bg-white p-6 border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2">
+              <Navigation className="h-5 w-5 text-blue-600" />
+              Next Stop
+            </h3>
+            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+              Scheduled: {nextJob.scheduledTime}
+            </span>
+          </div>
+          <div className="flex items-start gap-4 mb-6">
+            <div className="h-12 w-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400">
+              <MapPin className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="font-bold text-gray-900">{nextJob.title}</div>
+              <div className="text-sm text-gray-500">{nextJob.serviceAddress}</div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => startWorkSession(nextJob.id, 'travel')}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+            >
+              <Play className="h-4 w-4 fill-current" />
+              Start Travel
+            </button>
+            <button 
+              onClick={() => setSelectedTicket(nextJob)}
+              className="px-6 border border-gray-200 text-gray-700 py-3 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
+            >
+              Details
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Quick Tools Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+          <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Zap className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-bold text-gray-700">Field Tools</span>
+        </button>
+        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+          <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Package className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-bold text-gray-700">Inventory</span>
+        </button>
+        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+          <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <ClipboardCheck className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-bold text-gray-700">Checklists</span>
+          {pendingChecklists.length > 0 && (
+            <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500"></span>
+          )}
+        </button>
+        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+          <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Clock className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-bold text-gray-700">Time Log</span>
+        </button>
+      </div>
 
       {/* Today's Jobs */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
