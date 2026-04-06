@@ -124,7 +124,9 @@
         "createdAt": { "type": "string" },
         "sentDate": { "type": "string" },
         "acceptedDate": { "type": "string" },
-        "declinedDate": { "type": "string" }
+        "declinedDate": { "type": "string" },
+        "approvalId": { "type": "string" },
+        "authorizationId": { "type": "string" }
       },
       "required": ["ticketId", "clientId", "propertyId", "status", "subtotal", "tax", "total", "lineItems", "notes", "createdAt"]
     },
@@ -157,7 +159,9 @@
         "dueDate": { "type": "string" },
         "createdAt": { "type": "string" },
         "paidDate": { "type": "string" },
-        "paymentMethod": { "type": "string" }
+        "paymentMethod": { "type": "string" },
+        "paymentIds": { "type": "array", "items": { "type": "string" } },
+        "authorizationId": { "type": "string" }
       },
       "required": ["ticketId", "clientId", "propertyId", "status", "subtotal", "tax", "total", "lineItems", "notes", "dueDate", "createdAt"]
     },
@@ -278,12 +282,16 @@
       "type": "object",
       "properties": {
         "invoiceId": { "type": "string" },
+        "ticketId": { "type": "string" },
         "clientId": { "type": "string" },
+        "clientAccountId": { "type": "string" },
         "amount": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "completed", "failed", "refunded"] },
         "method": { "type": "string" },
         "timestamp": { "type": "string" },
-        "recordedBy": { "type": "string" }
+        "recordedBy": { "type": "string" },
+        "recordedByName": { "type": "string" },
+        "recordedByRole": { "type": "string" }
       },
       "required": ["invoiceId", "clientId", "amount", "status", "method", "timestamp", "recordedBy"]
     },
@@ -295,11 +303,63 @@
         "quoteId": { "type": "string" },
         "ticketId": { "type": "string" },
         "clientId": { "type": "string" },
+        "clientAccountId": { "type": "string" },
+        "approvedByUserId": { "type": "string" },
+        "approvedByName": { "type": "string" },
         "status": { "type": "string", "enum": ["approved", "declined"] },
         "timestamp": { "type": "string" },
-        "signatureName": { "type": "string" }
+        "signatureName": { "type": "string" },
+        "authorizationType": { "type": "string" }
       },
       "required": ["quoteId", "ticketId", "clientId", "status", "timestamp", "signatureName"]
+    },
+    "AuthorizationRecord": {
+      "title": "Authorization Record",
+      "description": "A record of a work authorization",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientAccountId": { "type": "string" },
+        "type": { "type": "string", "enum": ["work_start", "completion_signoff", "quote_approval"] },
+        "timestamp": { "type": "string" },
+        "signatureName": { "type": "string" },
+        "approvedByUserId": { "type": "string" },
+        "approvedByName": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string", "enum": ["authorized", "revoked"] }
+      },
+      "required": ["ticketId", "clientId", "type", "timestamp", "signatureName", "approvedByUserId", "approvedByName"]
+    },
+    "ClientInvitation": {
+      "title": "Client Invitation",
+      "description": "An invitation to join a client account",
+      "type": "object",
+      "properties": {
+        "accountId": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "member", "viewer"] },
+        "invitedBy": { "type": "string" },
+        "invitedAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "expired", "revoked"] },
+        "token": { "type": "string" }
+      },
+      "required": ["accountId", "email", "role", "invitedBy", "invitedAt", "status", "token"]
+    },
+    "ReminderEvent": {
+      "title": "Reminder Event",
+      "description": "A record of a reminder sent for a quote or invoice",
+      "type": "object",
+      "properties": {
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["quote", "invoice"] },
+        "clientId": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "sentBy": { "type": "string" },
+        "type": { "type": "string", "enum": ["initial", "follow_up", "overdue", "collections"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["targetId", "targetType", "clientId", "sentAt", "sentBy", "type"]
     }
   },
   "firestore": {
@@ -366,6 +426,18 @@
     "/approvalRecords/{approvalId}": {
       "schema": { "$ref": "#/entities/ApprovalRecord" },
       "description": "Stores quote approval records"
+    },
+    "/clientInvitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/ClientInvitation" },
+      "description": "Stores client invitations"
+    },
+    "/reminderEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/ReminderEvent" },
+      "description": "Stores reminder events"
+    },
+    "/authorizationRecords/{authId}": {
+      "schema": { "$ref": "#/entities/AuthorizationRecord" },
+      "description": "Stores work authorization records"
     }
   }
 }

@@ -186,7 +186,7 @@ export const CollectionsQueue: React.FC = () => {
   );
 };
 
-export const ReminderCenter: React.FC = () => {
+export const ReminderCenter: React.FC<{ setActiveTab?: (tab: string) => void }> = ({ setActiveTab }) => {
   const { tickets, quotes, invoices, serviceSummaries } = useApp();
 
   const alerts = useMemo(() => {
@@ -294,8 +294,17 @@ export const ReminderCenter: React.FC = () => {
                 </div>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed mb-3">{alert.description}</p>
                 <div className="flex items-center justify-end">
-                  <button className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:text-blue-700 transition-colors">
-                    View Ticket
+                  <button 
+                    onClick={() => {
+                      if (setActiveTab) {
+                        if (alert.type === 'finance') setActiveTab('billing');
+                        else if (alert.type === 'sales') setActiveTab('billing');
+                        else setActiveTab('dispatch');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:text-blue-700 transition-colors"
+                  >
+                    View Details
                     <ArrowRight className="h-3 w-3" />
                   </button>
                 </div>

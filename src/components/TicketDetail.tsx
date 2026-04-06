@@ -22,7 +22,9 @@ import {
   Package,
   Camera,
   ClipboardCheck,
-  FileText
+  FileText,
+  ShieldCheck,
+  Signature
 } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 import { STATUS_LABELS } from '../constants';
@@ -35,6 +37,144 @@ interface TicketDetailProps {
   ticket: Ticket;
   onClose: () => void;
 }
+
+const WorkAuthorizationPanel: React.FC<{ ticket: Ticket; allowSign: boolean }> = ({ ticket, allowSign }) => {
+  const { authorizationRecords, approvalRecords, createWorkAuthorization, currentUser, role } = useApp();
+  const [isSigning, setIsSigning] = useState<string | null>(null);
+  const [signatureName, setSignatureName] = useState(currentUser?.fullName || '');
+  const [notes, setNotes] = useState('');
+
+  const ticketAuths = authorizationRecords.filter(a => a.ticketId === ticket.id);
+  const ticketApprovals = approvalRecords.filter(a => a.ticketId === ticket.id);
+
+  const handleSign = async (type: 'work_start' | 'completion_signoff') => {
+    if (!signatureName) return;
+    setIsSigning(type);
+    try {
+      await createWorkAuthorization({
+        ticketId: ticket.id,
+        clientId: ticket.clientId,
+        type,
+        signatureName,
+        notes,
+        status: 'authorized'
+      });
+      setNotes('');
+    } finally {
+      setIsSigning(null);
+    }
+  };
+
+  const hasStartAuth = ticketAuths.some(a => a.type === 'work_start' || a.type === 'quote_approval');
+  const hasCompletionAuth = ticketAuths.some(a => a.type === 'completion_signoff');
+
+  return (
+    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-6">
+        <ShieldCheck className="h-5 w-5 text-blue-600" />
+        Authorization & Approvals
+      </h4>
+
+      <div className="space-y-6">
+        {/* Existing Records */}
+        {(ticketAuths.length > 0 || ticketApprovals.length > 0) && (
+          <div className="space-y-3">
+            {[...ticketAuths, ...ticketApprovals]
+              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              .map((record, idx) => (
+              <div key={idx} className="flex items-start gap-3 rounded-xl bg-gray-50 p-4 border border-gray-100">
+                <div className="mt-1 rounded-full bg-blue-100 p-1.5 text-blue-600">
+                  <Signature className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-900 uppercase tracking-tight">
+                      {'type' in record ? record.type.replace('_', ' ') : 'Quote Approval'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-medium">{formatDate(record.timestamp)}</span>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Signed by <span className="font-bold text-gray-900">{record.signatureName}</span>
+                  </div>
+                  {record.notes && (
+                    <div className="mt-2 text-xs italic text-gray-500 bg-white/50 p-2 rounded-lg border border-gray-100">
+                      "{record.notes}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Signing UI for Clients */}
+        {allowSign && (
+          <div className="space-y-4 pt-4 border-t border-gray-100">
+            {!hasStartAuth && ticket.status === 'approved' && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-5">
+                <h5 className="text-sm font-bold text-blue-900 mb-3">Authorize Work Start</h5>
+                <p className="text-xs text-blue-700 mb-4">Please sign below to authorize our team to begin work on this ticket.</p>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Type full name to sign"
+                    className="w-full rounded-lg border-blue-200 text-sm focus:ring-blue-500"
+                    value={signatureName}
+                    onChange={(e) => setSignatureName(e.target.value)}
+                  />
+                  <textarea
+                    placeholder="Optional notes..."
+                    className="w-full rounded-lg border-blue-200 text-sm focus:ring-blue-500"
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                  <button
+                    onClick={() => handleSign('work_start')}
+                    disabled={!signatureName || isSigning === 'work_start'}
+                    className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 disabled:opacity-50"
+                  >
+                    {isSigning === 'work_start' ? 'Signing...' : 'Sign & Authorize Start'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!hasCompletionAuth && ticket.status === 'completed' && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-5">
+                <h5 className="text-sm font-bold text-emerald-900 mb-3">Work Completion Sign-off</h5>
+                <p className="text-xs text-emerald-700 mb-4">Please sign below to acknowledge that the work has been completed to your satisfaction.</p>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Type full name to sign"
+                    className="w-full rounded-lg border-emerald-200 text-sm focus:ring-emerald-500"
+                    value={signatureName}
+                    onChange={(e) => setSignatureName(e.target.value)}
+                  />
+                  <textarea
+                    placeholder="Optional feedback..."
+                    className="w-full rounded-lg border-emerald-200 text-sm focus:ring-emerald-500"
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                  <button
+                    onClick={() => handleSign('completion_signoff')}
+                    disabled={!signatureName || isSigning === 'completion_signoff'}
+                    className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-100 disabled:opacity-50"
+                  >
+                    {isSigning === 'completion_signoff' ? 'Signing...' : 'Sign & Complete Job'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
 
 const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; editedTicket: Partial<Ticket>; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void; onClose: () => void }> = ({ ticket, currentTicket, editedTicket, handleChange, handleSave, handleStatusChange, onClose }) => {
   const { technicians, approveTicket, rejectTicket, quotes, invoices, createQuote, updateQuote, createInvoice, updateInvoice } = useApp();
@@ -119,6 +259,7 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
         </div>
 
         <CloseoutPanel ticket={ticket} />
+        <WorkAuthorizationPanel ticket={ticket} allowSign={false} />
       </div>
 
       {isPending && (
@@ -509,6 +650,7 @@ const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; 
         </div>
 
         <CloseoutPanel ticket={ticket} />
+        <WorkAuthorizationPanel ticket={ticket} allowSign={false} />
       </div>
 
       <div className="space-y-4">
@@ -559,6 +701,7 @@ const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
         </div>
 
         <CloseoutPanel ticket={ticket} allowEdit={false} />
+        <WorkAuthorizationPanel ticket={ticket} allowSign={true} />
       </div>
 
       {ticket.completionNotes && (

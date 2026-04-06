@@ -2,9 +2,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Global admin override
-    allow read, write: if request.auth != null && request.auth.token.email == "kaloussian.sebouh@hotmail.com";
+    
+    // Global admin override - applies to all collections and documents
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.token.email == "kaloussian.sebouh@hotmail.com";
+    }
 
     // ===============================================================
     // Helper Functions
@@ -34,10 +36,10 @@ service cloud.firestore {
     }
 
     function isClientMember(accountId) {
-      return isAuthenticated() && (
+      return isAuthenticated() && accountId != null && accountId != "" && (
         exists(/databases/$(database)/documents/clientMembers/$(request.auth.uid + "_" + accountId)) ||
-        // Also check if they are the owner of the account
-        get(/databases/$(database)/documents/clientAccounts/$(accountId)).data.ownerId == request.auth.uid
+        (exists(/databases/$(database)/documents/clientAccounts/$(accountId)) && 
+         get(/databases/$(database)/documents/clientAccounts/$(accountId)).data.ownerId == request.auth.uid)
       );
     }
 
@@ -276,25 +278,70 @@ service cloud.firestore {
 
     function isValidPaymentRecord() {
       let data = request.resource.data;
-      return hasRequiredFields(['invoiceId', 'clientId', 'amount', 'status', 'method', 'timestamp', 'recordedBy']) &&
+      return hasRequiredFields(['invoiceId', 'ticketId', 'clientId', 'clientAccountId', 'amount', 'status', 'method', 'timestamp', 'recordedBy', 'recordedByName', 'recordedByRole']) &&
              data.invoiceId is string &&
+             data.ticketId is string &&
              data.clientId is string &&
+             data.clientAccountId is string &&
              data.amount is number && data.amount >= 0 &&
              data.status in ['pending', 'completed', 'failed', 'refunded'] &&
-             data.method is string &&
+             data.method in ['credit_card', 'bank_transfer', 'check', 'cash', 'other', 'online'] &&
              data.timestamp is string &&
-             data.recordedBy is string;
+             data.recordedBy is string &&
+             data.recordedByName is string &&
+             data.recordedByRole in ['ADMIN', 'TECHNICIAN', 'CLIENT'];
     }
 
     function isValidApprovalRecord() {
       let data = request.resource.data;
-      return hasRequiredFields(['quoteId', 'ticketId', 'clientId', 'status', 'timestamp', 'signatureName']) &&
+      return hasRequiredFields(['quoteId', 'ticketId', 'clientId', 'clientAccountId', 'approvedByUserId', 'approvedByName', 'status', 'timestamp', 'signatureName']) &&
              data.quoteId is string &&
              data.ticketId is string &&
              data.clientId is string &&
+             data.clientAccountId is string &&
+             data.approvedByUserId is string &&
+             data.approvedByName is string &&
              data.status in ['approved', 'declined'] &&
              data.timestamp is string &&
-             data.signatureName is string;
+             data.signatureName is string &&
+             (!('authorizationType' in data) || data.authorizationType is string);
+    }
+
+    function isValidAuthorizationRecord() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'clientId', 'clientAccountId', 'type', 'timestamp', 'signatureName', 'approvedByUserId', 'approvedByName', 'status']) &&
+             data.ticketId is string &&
+             data.clientId is string &&
+             data.clientAccountId is string &&
+             data.type in ['work_start', 'completion_signoff', 'quote_approval'] &&
+             data.timestamp is string &&
+             data.signatureName is string &&
+             data.approvedByUserId is string &&
+             data.approvedByName is string &&
+             data.status in ['authorized', 'revoked'];
+    }
+
+    function isValidClientInvitation() {
+      let data = request.resource.data;
+      return hasRequiredFields(['accountId', 'email', 'role', 'invitedBy', 'invitedAt', 'status', 'token']) &&
+             data.accountId is string &&
+             data.email is string &&
+             data.role in ['owner', 'admin', 'member', 'viewer'] &&
+             data.invitedBy is string &&
+             data.invitedAt is string &&
+             data.status in ['pending', 'accepted', 'expired', 'revoked'] &&
+             data.token is string;
+    }
+
+    function isValidReminderEvent() {
+      let data = request.resource.data;
+      return hasRequiredFields(['targetId', 'targetType', 'clientId', 'sentAt', 'sentBy', 'type']) &&
+             data.targetId is string &&
+             data.targetType in ['quote', 'invoice'] &&
+             data.clientId is string &&
+             data.sentAt is string &&
+             data.sentBy is string &&
+             data.type in ['initial', 'follow_up', 'overdue', 'collections'];
     }
 
     // ===============================================================
@@ -319,21 +366,21 @@ service cloud.firestore {
     }
 
     match /quotes/{quoteId} {
-      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId) || isClientMember(resource.data.clientAccountId));
       allow create: if isAdmin() && isValidQuote();
       allow update: if isAuthenticated() && isValidQuote() && (
         isAdmin() || 
-        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvalId']) && request.resource.data.status in ['accepted', 'declined'])
+        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvalId', 'authorizationId']) && request.resource.data.status in ['accepted', 'declined'])
       );
       allow delete: if isAdmin();
     }
 
     match /invoices/{invoiceId} {
-      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId) || isClientMember(resource.data.clientAccountId));
       allow create: if isAdmin() && isValidInvoice();
       allow update: if isAuthenticated() && isValidInvoice() && (
         isAdmin() || 
-        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paymentMethod', 'paymentIds']) && request.resource.data.status == 'paid')
+        (isOwner(resource.data.clientId) && request.resource.data.clientId == resource.data.clientId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paymentMethod', 'paymentIds', 'authorizationId']) && request.resource.data.status == 'paid')
       );
       allow delete: if isAdmin();
     }
@@ -453,15 +500,22 @@ service cloud.firestore {
     }
 
     match /paymentRecords/{paymentId} {
-      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
-      allow create: if isAdmin() && isValidPaymentRecord();
-      allow update: if isAdmin() && isValidPaymentRecord();
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId) || isClientMember(resource.data.clientAccountId));
+      allow create: if isAuthenticated() && isValidPaymentRecord() && (isAdmin() || isOwner(request.resource.data.clientId));
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     match /approvalRecords/{approvalId} {
-      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId) || isClientMember(resource.data.clientAccountId));
       allow create: if isAuthenticated() && isValidApprovalRecord() && (isAdmin() || isOwner(request.resource.data.clientId));
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /authorizationRecords/{authId} {
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId) || isClientMember(resource.data.clientAccountId));
+      allow create: if isAuthenticated() && isValidAuthorizationRecord() && (isAdmin() || isOwner(request.resource.data.clientId));
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -469,6 +523,20 @@ service cloud.firestore {
     match /recurringGenerationLog/{logId} {
       allow read: if isAuthenticated() && isAdmin();
       allow create: if isAuthenticated() && isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /clientInvitations/{invitationId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.token.email == resource.data.email || isOwner(get(/databases/$(database)/documents/clientAccounts/$(resource.data.accountId)).data.ownerId));
+      allow create: if isAuthenticated() && isValidClientInvitation() && (isAdmin() || isOwner(get(/databases/$(database)/documents/clientAccounts/$(request.resource.data.accountId)).data.ownerId));
+      allow update: if isAuthenticated() && isValidClientInvitation() && (isAdmin() || request.auth.token.email == resource.data.email || isOwner(get(/databases/$(database)/documents/clientAccounts/$(resource.data.accountId)).data.ownerId));
+      allow delete: if isAuthenticated() && (isAdmin() || isOwner(get(/databases/$(database)/documents/clientAccounts/$(resource.data.accountId)).data.ownerId));
+    }
+
+    match /reminderEvents/{eventId} {
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
+      allow create: if isAuthenticated() && isValidReminderEvent() && isAdmin();
       allow update: if false;
       allow delete: if isAdmin();
     }

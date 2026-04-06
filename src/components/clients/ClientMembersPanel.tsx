@@ -19,7 +19,7 @@ interface ClientMembersPanelProps {
 }
 
 const ClientMembersPanel: React.FC<ClientMembersPanelProps> = ({ member, onClose }) => {
-  const { clientAccount, createClientMember, updateClientMemberRole, removeClientMember } = useApp();
+  const { clientAccount, inviteClientMember, updateClientMemberRole, removeClientMember } = useApp();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,10 +47,7 @@ const ClientMembersPanel: React.FC<ClientMembersPanelProps> = ({ member, onClose
       if (member) {
         await updateClientMemberRole(member.id, formData.role as any);
       } else {
-        await createClientMember({
-          ...formData as Omit<ClientMember, 'id' | 'accountId' | 'addedAt'>,
-          accountId: clientAccount.id
-        });
+        await inviteClientMember(clientAccount.id, formData.clientId!, formData.role as any);
       }
       onClose();
     } catch (err) {

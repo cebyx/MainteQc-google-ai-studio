@@ -49,17 +49,18 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
   const todayJobs = tickets.filter(t => t.scheduledDate === todayStr).length;
   const unpaidRevenue = invoices.filter(i => i.status !== 'paid').reduce((acc, inv) => acc + inv.total, 0);
   const pendingQuotesCount = quotes.filter(q => q.status === 'sent').length;
+  const pendingApprovalsCount = quotes.filter(q => q.status === 'sent' && q.approvalId === undefined).length;
 
   return (
     <div className="space-y-8">
       {/* Top Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard 
-          title="Pending Review" 
-          value={pendingCount} 
+          title="Pending Approvals" 
+          value={pendingApprovalsCount} 
           icon={AlertCircle} 
           color="bg-amber-500" 
-          trend="+2 New"
+          trend={pendingApprovalsCount > 0 ? "Action Needed" : undefined}
         />
         <StatCard 
           title="Active Jobs" 
@@ -85,7 +86,7 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
         {/* Left Column: Operational Intelligence */}
         <div className="lg:col-span-2 space-y-8">
           {/* Business Automation Alerts */}
-          <ReminderCenter />
+          <ReminderCenter setActiveTab={setActiveTab} />
 
           {/* Recent Service Requests */}
           <div className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">

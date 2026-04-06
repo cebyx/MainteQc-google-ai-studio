@@ -90,6 +90,7 @@ export interface Ticket {
   completionNotes: string;
   quoteStatus?: 'none' | 'draft' | 'sent' | 'accepted' | 'declined';
   invoiceStatus?: 'none' | 'draft' | 'sent' | 'unpaid' | 'paid' | 'overdue';
+  authorizationId?: string; // Link to AuthorizationRecord
   createdAt: string;
   createdByEmail: string;
 }
@@ -114,6 +115,7 @@ export interface Quote {
   viewedAt?: string;
   exportedAt?: string;
   approvalId?: string; // Link to ApprovalRecord
+  authorizationId?: string; // Link to AuthorizationRecord
 }
 
 export interface Invoice {
@@ -138,6 +140,7 @@ export interface Invoice {
   collectionsStatus?: 'none' | 'active' | 'resolved';
   agingBucket?: 'current' | '1-30' | '31-60' | '61-90' | '90+';
   paymentIds?: string[]; // Links to PaymentRecords
+  authorizationId?: string; // Link to AuthorizationRecord
 }
 
 export interface Message {
@@ -271,40 +274,80 @@ export interface RecurringGenerationLog {
   error?: string;
 }
 
+export interface ClientInvitation {
+  id: string;
+  accountId: string;
+  email: string;
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+  invitedBy: string; // User ID
+  invitedAt: string;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  acceptedAt?: string;
+  acceptedByClientId?: string; // The client ID that accepted it
+  token: string;
+}
+
+export interface ReminderEvent {
+  id: string;
+  targetId: string; // quoteId or invoiceId
+  invoiceId: string; // Added for easier lookup
+  targetType: 'quote' | 'invoice';
+  clientId: string;
+  sentAt: string;
+  timestamp: string; // Added for sorting and consistency
+  sentBy: string; // User ID
+  sentByName: string; // Added for display
+  sentByRole: UserRole; // Added for display
+  type: 'initial' | 'follow_up' | 'overdue' | 'collections';
+  notes: string;
+}
+
 export interface ApprovalRecord {
   id: string;
   quoteId: string;
   ticketId: string;
   clientId: string;
-  clientName: string;
+  clientAccountId: string;
+  approvedByUserId: string;
+  approvedByName: string;
   status: 'approved' | 'declined';
   timestamp: string;
   notes: string;
   ipAddress?: string;
   userAgent?: string;
   signatureName?: string; // Typed name as signature
+  authorizationType?: 'quote_approval' | 'work_order_authorization';
 }
 
 export interface PaymentRecord {
   id: string;
   invoiceId: string;
+  ticketId: string;
   clientId: string;
+  clientAccountId: string;
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
-  method: 'credit_card' | 'bank_transfer' | 'check' | 'cash' | 'other';
+  method: 'credit_card' | 'bank_transfer' | 'check' | 'cash' | 'other' | 'online';
   transactionId?: string;
+  reference?: string; // Added for reference/check number
   timestamp: string;
   notes: string;
   recordedBy: string; // User ID who recorded it
+  recordedByName: string;
+  recordedByRole: UserRole;
 }
 
 export interface AuthorizationRecord {
   id: string;
   ticketId: string;
   clientId: string;
-  type: 'work_start' | 'completion_signoff';
+  clientAccountId: string;
+  type: 'work_start' | 'completion_signoff' | 'quote_approval';
   timestamp: string;
   signatureName: string;
+  approvedByUserId: string;
+  approvedByName: string;
   notes: string;
+  status: 'authorized' | 'revoked';
 }

@@ -20,7 +20,7 @@ import { TicketDetail } from './TicketDetail';
 import { Ticket, Quote, Invoice, ActivityEvent, Message } from '../types';
 
 export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
-  const { tickets, currentUser, properties, quotes, invoices, activities, messages, attachments, serviceSummaries } = useApp();
+  const { tickets, currentUser, properties, quotes, invoices, activities, messages, attachments, serviceSummaries, maintenancePlans } = useApp();
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // Filter records for this client
@@ -31,6 +31,14 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
   // Financials
   const pendingQuotes = quotes.filter(q => q.clientId === currentUser.id && q.status === 'sent');
   const unpaidInvoices = invoices.filter(i => i.clientId === currentUser.id && i.status === 'unpaid');
+  const overdueInvoices = invoices.filter(i => i.clientId === currentUser.id && i.status === 'overdue');
+  
+  // Maintenance Plans
+  const activePlans = maintenancePlans.filter(p => p.clientId === currentUser.id && p.status === 'active');
+  const upcomingPlans = activePlans
+    .filter(p => new Date(p.nextDueDate) > new Date())
+    .sort((a, b) => new Date(a.nextDueDate).getTime() - new Date(b.nextDueDate).getTime())
+    .slice(0, 3);
   
   // Recent Activity
   const myActivities = activities
@@ -72,7 +80,7 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
       </div>
 
       {/* Action Required / Financials */}
-      {(pendingQuotes.length > 0 || unpaidInvoices.length > 0) && (
+      {(pendingQuotes.length > 0 || unpaidInvoices.length > 0 || overdueInvoices.length > 0) && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {pendingQuotes.map(quote => (
             <div key={quote.id} className="flex items-center justify-between rounded-2xl border-2 border-amber-100 bg-amber-50 p-4 shadow-sm">
@@ -86,13 +94,29 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
                 </div>
               </div>
               <button 
-                onClick={() => {
-                  const ticket = tickets.find(t => t.id === quote.ticketId);
-                  if (ticket) setSelectedTicket(ticket);
-                }}
+                onClick={() => setActiveTab('billing')}
                 className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-amber-700 active:scale-95 transition-all"
               >
                 Review
+              </button>
+            </div>
+          ))}
+          {overdueInvoices.map(invoice => (
+            <div key={invoice.id} className="flex items-center justify-between rounded-2xl border-2 border-red-100 bg-red-50 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-red-100 p-2 text-red-600">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-red-900">Overdue Invoice</div>
+                  <div className="text-xs text-red-700">Ticket #{invoice.ticketId.slice(-4)} • ${invoice.total.toFixed(2)}</div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveTab('billing')}
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 active:scale-95 transition-all"
+              >
+                Pay Now
               </button>
             </div>
           ))}
@@ -108,10 +132,7 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
                 </div>
               </div>
               <button 
-                onClick={() => {
-                  const ticket = tickets.find(t => t.id === invoice.ticketId);
-                  if (ticket) setSelectedTicket(ticket);
-                }}
+                onClick={() => setActiveTab('billing')}
                 className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 active:scale-95 transition-all"
               >
                 Pay Now
@@ -169,6 +190,33 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
               </div>
             )}
           </div>
+
+          {/* Upcoming Maintenance */}
+          {upcomingPlans.length > 0 && (
+            <div className="pt-4">
+              <h3 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-blue-600" />
+                Upcoming Maintenance
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {upcomingPlans.map(plan => (
+                  <div key={plan.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
+                        {plan.category}
+                      </span>
+                      <span className="text-xs font-bold text-gray-500 capitalize">{plan.frequency}</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900">{plan.title}</h4>
+                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      Due: {formatDate(plan.nextDueDate)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recent Activity */}
           <div className="pt-4">

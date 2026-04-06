@@ -58,6 +58,7 @@ const PaymentHistoryPanel: React.FC<PaymentHistoryPanelProps> = ({ invoice, onCl
     try {
       await recordPayment({
         invoiceId: invoice.id,
+        ticketId: invoice.ticketId,
         clientId: invoice.clientId,
         amount: newPayment.amount,
         currency: 'USD',

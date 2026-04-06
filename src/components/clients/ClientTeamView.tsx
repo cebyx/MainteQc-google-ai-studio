@@ -18,7 +18,7 @@ import { ClientMember, ClientAccount } from '../../types';
 import ClientMembersPanel from './ClientMembersPanel';
 
 const ClientTeamView: React.FC = () => {
-  const { clientAccount, clientMembers, loading } = useApp();
+  const { clientAccount, clientMembers, clientInvitations, loading, inviteClientMember } = useApp();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<ClientMember | undefined>(undefined);
 
@@ -126,6 +126,44 @@ const ClientTeamView: React.FC = () => {
                       className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
                     >
                       <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {clientInvitations?.filter(inv => inv.accountId === clientAccount.id && inv.status === 'pending').map((invitation) => (
+                <div key={invitation.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group opacity-75">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border border-gray-200">
+                      {invitation.email.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{invitation.email}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getRoleBadgeColor(invitation.role)}`}>
+                          {invitation.role}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <Mail className="w-3 h-3" />
+                          Invitation Sent
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-amber-500">
+                          <Clock className="w-4 h-4" />
+                          <span>Pending</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => inviteClientMember(clientAccount.id, invitation.email, invitation.role)}
+                      className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                      title="Resend Invitation"
+                    >
+                      <Mail className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

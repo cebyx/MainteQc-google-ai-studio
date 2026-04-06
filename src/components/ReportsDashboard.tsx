@@ -14,7 +14,7 @@ import { cn } from '../lib/utils';
 export const ReportsDashboard: React.FC = () => {
   const { 
     tickets, quotes, invoices, technicians, clients, 
-    maintenancePlans, approvalRecords, paymentRecords 
+    maintenancePlans, approvalRecords, paymentRecords, reminderEvents
   } = useApp();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
 
@@ -90,6 +90,19 @@ export const ReportsDashboard: React.FC = () => {
       conversionRate
     };
   }, [quotes]);
+
+  // Reminder Metrics
+  const reminderStats = useMemo(() => {
+    const totalReminders = reminderEvents.length;
+    const quoteReminders = reminderEvents.filter(r => r.targetType === 'quote').length;
+    const invoiceReminders = reminderEvents.filter(r => r.targetType === 'invoice').length;
+
+    return {
+      total: totalReminders,
+      quotes: quoteReminders,
+      invoices: invoiceReminders
+    };
+  }, [reminderEvents]);
 
   // Job Volume over time (mocking some data points based on real tickets)
   const jobVolumeData = useMemo(() => {
@@ -186,12 +199,12 @@ export const ReportsDashboard: React.FC = () => {
           subtitle="Quote approvals"
         />
         <StatCard 
-          title="Outstanding" 
-          value={`$${financialStats.outstandingRevenue.toLocaleString()}`} 
+          title="Reminders Sent" 
+          value={`${reminderStats.total}`} 
           icon={<AlertCircle className="h-5 w-5 text-amber-600" />}
-          trend={`${financialStats.unpaidCount} pending`}
-          trendUp={false}
-          subtitle="Unpaid invoices"
+          trend={`${reminderStats.invoices} invoices`}
+          trendUp={true}
+          subtitle="Follow-ups"
         />
       </div>
 
