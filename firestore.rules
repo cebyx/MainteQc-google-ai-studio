@@ -344,6 +344,63 @@ service cloud.firestore {
              data.type in ['initial', 'follow_up', 'overdue', 'collections'];
     }
 
+    function isValidInventoryItem() {
+      let data = request.resource.data;
+      return hasRequiredFields(['name', 'sku', 'category', 'unit', 'price', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.sku is string && data.sku.size() > 0 && data.sku.size() < 100 &&
+             data.category is string && data.category.size() < 100 &&
+             data.unit is string && data.unit.size() < 50 &&
+             data.price is number && data.price >= 0 &&
+             data.status in ['active', 'discontinued', 'out_of_stock'] &&
+             (!('description' in data) || (data.description is string && data.description.size() < 1000)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 2000));
+    }
+
+    function isValidTechnicianStock() {
+      let data = request.resource.data;
+      return hasRequiredFields(['technicianId', 'itemId', 'itemName', 'sku', 'quantity', 'minThreshold']) &&
+             data.technicianId is string && data.technicianId.size() > 0 &&
+             data.itemId is string && data.itemId.size() > 0 &&
+             data.itemName is string && data.itemName.size() > 0 &&
+             data.sku is string && data.sku.size() > 0 &&
+             data.quantity is number && data.quantity >= 0 &&
+             data.minThreshold is number && data.minThreshold >= 0;
+    }
+
+    function isValidPartsRequest() {
+      let data = request.resource.data;
+      return hasRequiredFields(['technicianId', 'technicianName', 'ticketId', 'items', 'status', 'urgency', 'createdAt']) &&
+             data.technicianId is string && data.technicianId.size() > 0 &&
+             data.technicianName is string && data.technicianName.size() > 0 &&
+             data.ticketId is string && data.ticketId.size() > 0 &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 50 &&
+             data.status in ['pending', 'approved', 'rejected', 'ordered', 'received', 'fulfilled', 'cancelled'] &&
+             data.urgency in ['low', 'medium', 'high', 'emergency'] &&
+             data.createdAt is string &&
+             (!('adminNotes' in data) || (data.adminNotes is string && data.adminNotes.size() < 2000)) &&
+             (!('technicianNotes' in data) || (data.technicianNotes is string && data.technicianNotes.size() < 2000)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string));
+    }
+
+    function isValidStockMovement() {
+      let data = request.resource.data;
+      return hasRequiredFields(['itemId', 'itemName', 'sku', 'technicianId', 'type', 'quantity', 'previousQuantity', 'newQuantity', 'timestamp', 'actorId', 'actorName']) &&
+             data.itemId is string && data.itemId.size() > 0 &&
+             data.itemName is string && data.itemName.size() > 0 &&
+             data.sku is string && data.sku.size() > 0 &&
+             data.technicianId is string && data.technicianId.size() > 0 &&
+             data.type in ['adjustment', 'transfer', 'issue', 'request_fulfillment', 'restock'] &&
+             data.quantity is number &&
+             data.previousQuantity is number &&
+             data.newQuantity is number &&
+             data.timestamp is string &&
+             data.actorId is string &&
+             data.actorName is string &&
+             (!('referenceId' in data) || (data.referenceId is string)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 1000));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -537,6 +594,39 @@ service cloud.firestore {
     match /reminderEvents/{eventId} {
       allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.clientId));
       allow create: if isAuthenticated() && isValidReminderEvent() && isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /inventoryItems/{itemId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidInventoryItem();
+      allow delete: if isAdmin();
+    }
+
+    match /technicianStock/{stockId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
+      allow create: if isAdmin() && isValidTechnicianStock();
+      allow update: if isAuthenticated() && isValidTechnicianStock() && (
+        isAdmin() || 
+        (resource.data.technicianId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /partsRequests/{requestId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
+      allow create: if isAuthenticated() && isTechnician() && isValidPartsRequest() && request.resource.data.technicianId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidPartsRequest() && (
+        isAdmin() || 
+        (resource.data.technicianId == request.auth.uid && resource.data.status == 'pending' && request.resource.data.status in ['pending', 'cancelled'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /stockMovements/{movementId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidStockMovement() && (isAdmin() || isTechnician());
       allow update: if false;
       allow delete: if isAdmin();
     }

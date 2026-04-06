@@ -14,7 +14,8 @@ import { cn } from '../lib/utils';
 export const ReportsDashboard: React.FC = () => {
   const { 
     tickets, quotes, invoices, technicians, clients, 
-    maintenancePlans, approvalRecords, paymentRecords, reminderEvents
+    maintenancePlans, approvalRecords, paymentRecords, reminderEvents,
+    partsRequests, technicianStock, inventoryItems
   } = useApp();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
 
@@ -103,6 +104,26 @@ export const ReportsDashboard: React.FC = () => {
       invoices: invoiceReminders
     };
   }, [reminderEvents]);
+
+  // Inventory Metrics
+  const inventoryStats = useMemo(() => {
+    const totalRequests = partsRequests.length;
+    const pendingRequests = partsRequests.filter(r => r.status === 'pending').length;
+    const fulfilledRequests = partsRequests.filter(r => r.status === 'fulfilled').length;
+    const fulfillmentRate = totalRequests > 0 ? (fulfilledRequests / totalRequests) * 100 : 0;
+
+    const lowStockVans = new Set(technicianStock.filter(s => s.quantity <= s.minThreshold).map(s => s.technicianId)).size;
+    const outOfStockItems = technicianStock.filter(s => s.quantity === 0).length;
+
+    return {
+      totalRequests,
+      pendingRequests,
+      fulfilledRequests,
+      fulfillmentRate,
+      lowStockVans,
+      outOfStockItems
+    };
+  }, [partsRequests, technicianStock]);
 
   // Job Volume over time (mocking some data points based on real tickets)
   const jobVolumeData = useMemo(() => {

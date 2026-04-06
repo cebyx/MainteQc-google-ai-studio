@@ -14,7 +14,10 @@ import {
   Plus,
   BarChart3,
   ShieldCheck,
-  Zap
+  Zap,
+  Package,
+  ClipboardList,
+  AlertTriangle
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { formatCurrency, formatDate } from '../lib/utils';
@@ -41,7 +44,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: any; col
 );
 
 export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
-  const { tickets, clients, technicians, invoices, quotes } = useApp();
+  const { tickets, clients, technicians, invoices, quotes, partsRequests, technicianStock } = useApp();
 
   const pendingCount = tickets.filter(t => t.status === 'pending_review').length;
   const activeCount = tickets.filter(t => ['in_progress', 'on_the_way', 'arrived'].includes(t.status)).length;
@@ -50,6 +53,9 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
   const unpaidRevenue = invoices.filter(i => i.status !== 'paid').reduce((acc, inv) => acc + inv.total, 0);
   const pendingQuotesCount = quotes.filter(q => q.status === 'sent').length;
   const pendingApprovalsCount = quotes.filter(q => q.status === 'sent' && q.approvalId === undefined).length;
+  
+  const openPartsRequests = partsRequests.filter(r => ['pending', 'approved', 'ordered', 'received'].includes(r.status)).length;
+  const lowStockAlerts = technicianStock.filter(s => s.quantity <= s.minThreshold).length;
 
   return (
     <div className="space-y-8">
@@ -149,6 +155,28 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
               <button onClick={() => setActiveTab('records')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-blue-50 hover:border-blue-100 group">
                 <Zap className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
                 <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Records</span>
+              </button>
+              <button onClick={() => setActiveTab('inventory')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-amber-50 hover:border-amber-100 group relative">
+                <Package className="h-6 w-6 text-amber-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Inventory</span>
+                {lowStockAlerts > 0 && (
+                  <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white ring-2 ring-white">
+                    {lowStockAlerts}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => setActiveTab('parts-requests')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-purple-50 hover:border-purple-100 group relative">
+                <ClipboardList className="h-6 w-6 text-purple-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Parts Req</span>
+                {openPartsRequests > 0 && (
+                  <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-purple-500 text-[8px] font-bold text-white ring-2 ring-white">
+                    {openPartsRequests}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => setActiveTab('purchasing')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-red-50 hover:border-red-100 group">
+                <AlertTriangle className="h-6 w-6 text-red-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Restock</span>
               </button>
               <button onClick={() => setActiveTab('clients')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-amber-50 hover:border-amber-100 group">
                 <Users className="h-6 w-6 text-amber-600 group-hover:scale-110 transition-transform" />

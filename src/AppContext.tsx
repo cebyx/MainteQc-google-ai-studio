@@ -3,7 +3,7 @@ import {
   UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, 
   ActivityEvent, Attachment, MaterialUsed, ServiceSummary, ClientAccount, ClientMember, 
   MaintenancePlan, RecurringGenerationLog, ApprovalRecord, PaymentRecord, ClientInvitation, ReminderEvent, AuthorizationRecord,
-  WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction
+  WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction, StockMovement
 } from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -79,6 +79,7 @@ interface AppContextType {
   checklistTemplates: ChecklistTemplate[];
   ticketChecklists: TicketChecklist[];
   pendingSyncQueue: PendingSyncAction[];
+  stockMovements: StockMovement[];
   loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
@@ -151,6 +152,17 @@ interface AppContextType {
   updateChecklistItem: (ticketId: string, checklistId: string, itemId: string, completed: boolean, note?: string) => Promise<void>;
   enqueuePendingSyncAction: (action: Omit<PendingSyncAction, 'id' | 'timestamp' | 'status'>) => void;
   retryPendingSyncAction: (id: string) => Promise<void>;
+  
+  // Admin Inventory Helpers
+  createInventoryItem: (item: Omit<InventoryItem, 'id'>) => Promise<void>;
+  updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>;
+  adjustTechnicianStock: (technicianId: string, itemId: string, delta: number, reason: string, ticketId?: string) => Promise<void>;
+  transferStockToTechnician: (technicianId: string, itemId: string, quantity: number) => Promise<void>;
+  createStockMovement: (movement: Omit<StockMovement, 'id' | 'timestamp'>) => Promise<void>;
+  fulfillPartsRequest: (requestId: string, adminNotes?: string) => Promise<void>;
+  markPartsRequestOrdered: (requestId: string, adminNotes?: string) => Promise<void>;
+  markPartsRequestReceived: (requestId: string, adminNotes?: string) => Promise<void>;
+  cancelPartsRequest: (requestId: string, adminNotes?: string) => Promise<void>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -193,6 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>([]);
   const [ticketChecklists, setTicketChecklists] = useState<TicketChecklist[]>([]);
   const [pendingSyncQueue, setPendingSyncQueue] = useState<PendingSyncAction[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Test connection on boot
@@ -1885,6 +1898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newRequest: Omit<PartsRequest, 'id'> = {
         ...request,
         technicianId: currentUser.id,
+        technicianName: currentUser.fullName,
         status: 'pending',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1987,7 +2001,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     } catch (error) {
       console.error('Error updating checklist item:', error);
-      enqueuePendingSyncAction('checklist_item', { ticketId, checklistId, itemId, completed, note });
+      enqueuePendingSyncAction({ 
+        type: 'checklist_item', 
+        payload: { ticketId, checklistId, itemId, completed, note } 
+      });
     }
   };
 
@@ -2025,13 +2042,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const createInventoryItem = async (item: Omit<InventoryItem, 'id'>) => {
+    try {
+      await addDoc(collection(db, 'inventoryItems'), {
+        ...item,
+        status: 'active'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'inventoryItems');
+    }
+  };
+
+  const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>) => {
+    try {
+      await updateDoc(doc(db, 'inventoryItems', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `inventoryItems/${id}`);
+    }
+  };
+
+  const createStockMovement = async (movement: Omit<StockMovement, 'id' | 'timestamp'>) => {
+    try {
+      await addDoc(collection(db, 'stockMovements'), {
+        ...movement,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'stockMovements');
+    }
+  };
+
+  const adjustTechnicianStock = async (technicianId: string, itemId: string, delta: number, reason: string, ticketId?: string) => {
+    try {
+      const stockItem = technicianStock.find(s => s.technicianId === technicianId && s.itemId === itemId);
+      const item = inventoryItems.find(i => i.id === itemId);
+      
+      if (stockItem) {
+        await updateDoc(doc(db, 'technicianStock', stockItem.id), {
+          quantity: Math.max(0, stockItem.quantity + delta),
+          lastRestockedAt: delta > 0 ? new Date().toISOString() : stockItem.lastRestockedAt,
+        });
+      } else if (delta > 0) {
+        await addDoc(collection(db, 'technicianStock'), {
+          technicianId,
+          itemId,
+          quantity: delta,
+          minThreshold: 5,
+          lastRestockedAt: new Date().toISOString(),
+        });
+      }
+
+      await createStockMovement({
+        itemId,
+        itemName: item?.name || 'Unknown Item',
+        technicianId,
+        technicianName: technicians.find(t => t.id === technicianId)?.fullName || 'Unknown Technician',
+        type: delta > 0 ? 'restock' : 'issue',
+        quantityDelta: delta,
+        reason,
+        ticketId,
+        createdByUserId: currentUser.id,
+        createdByName: currentUser.fullName,
+        createdByRole: role
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'technicianStock');
+    }
+  };
+
+  const transferStockToTechnician = async (technicianId: string, itemId: string, quantity: number) => {
+    await adjustTechnicianStock(technicianId, itemId, quantity, 'Stock Transfer');
+  };
+
+  const fulfillPartsRequest = async (requestId: string, adminNotes?: string) => {
+    try {
+      const request = partsRequests.find(r => r.id === requestId);
+      if (!request) return;
+
+      // Update request status
+      await updateDoc(doc(db, 'partsRequests', requestId), {
+        status: 'fulfilled',
+        adminNotes,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update technician stock for each item
+      for (const item of request.items) {
+        await adjustTechnicianStock(request.technicianId, item.itemId, item.quantity, `Fulfilled Request #${requestId.slice(-6)}`, request.ticketId);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `partsRequests/${requestId}`);
+    }
+  };
+
+  const markPartsRequestOrdered = async (requestId: string, adminNotes?: string) => {
+    try {
+      await updateDoc(doc(db, 'partsRequests', requestId), {
+        status: 'ordered',
+        adminNotes,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `partsRequests/${requestId}`);
+    }
+  };
+
+  const markPartsRequestReceived = async (requestId: string, adminNotes?: string) => {
+    try {
+      await updateDoc(doc(db, 'partsRequests', requestId), {
+        status: 'received',
+        adminNotes,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `partsRequests/${requestId}`);
+    }
+  };
+
+  const cancelPartsRequest = async (requestId: string, adminNotes?: string) => {
+    try {
+      await updateDoc(doc(db, 'partsRequests', requestId), {
+        status: 'cancelled',
+        adminNotes,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `partsRequests/${requestId}`);
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       role, currentUser, brand, setBrand,
       clients, technicians, tickets, properties, quotes, invoices, messages, activities,
       attachments, materialsUsed, serviceSummaries,
       clientAccounts, clientAccount, clientMembers, clientInvitations, maintenancePlans, paymentRecords, approvalRecords, reminderEvents, authorizationRecords, recurringGenerationLog,
-      workSessions, inventoryItems, technicianStock, partsRequests, checklistTemplates, ticketChecklists, pendingSyncQueue,
+      workSessions, inventoryItems, technicianStock, partsRequests, checklistTemplates, ticketChecklists, pendingSyncQueue, stockMovements,
       loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
@@ -2042,6 +2188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createMaintenancePlan, updateMaintenancePlan, deleteMaintenancePlan,
       recordPayment, listPaymentRecords, sendPaymentReminder, approveQuoteWithAuthorization, createWorkAuthorization, generateRecurringTicket,
       startWorkSession, stopWorkSession, createPartsRequest, updatePartsRequestStatus, updateInventoryQuantity, updateChecklistItem, enqueuePendingSyncAction, retryPendingSyncAction,
+      createInventoryItem, updateInventoryItem, adjustTechnicianStock, transferStockToTechnician, createStockMovement, fulfillPartsRequest, markPartsRequestOrdered, markPartsRequestReceived, cancelPartsRequest,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

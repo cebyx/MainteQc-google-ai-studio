@@ -373,6 +373,7 @@ export interface InventoryItem {
   unit: string;
   basePrice: number;
   description: string;
+  status: 'active' | 'inactive';
 }
 
 export interface TechnicianStock {
@@ -388,13 +389,31 @@ export interface PartsRequest {
   id: string;
   ticketId: string;
   technicianId: string;
+  technicianName: string;
   items: { itemId: string; name: string; quantity: number }[];
   urgency: 'low' | 'medium' | 'high' | 'emergency';
   reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'ordered' | 'received' | 'cancelled';
+  status: 'draft' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'received' | 'fulfilled' | 'cancelled';
   createdAt: string;
   updatedAt: string;
   adminNotes?: string;
+}
+
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  itemName: string;
+  technicianId?: string;
+  technicianName?: string;
+  type: 'adjustment' | 'transfer' | 'issue' | 'request_reserved' | 'request_fulfilled' | 'restock';
+  quantityDelta: number;
+  reason: string;
+  ticketId?: string;
+  partsRequestId?: string;
+  createdByUserId: string;
+  createdByName: string;
+  createdByRole: string;
+  timestamp: string;
 }
 
 export interface ChecklistItemTemplate {

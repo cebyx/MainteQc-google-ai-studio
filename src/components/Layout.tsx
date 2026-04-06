@@ -22,7 +22,9 @@ import {
   Wrench,
   Clock,
   Package,
-  LayoutGrid
+  LayoutGrid,
+  History,
+  ShoppingCart
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -65,6 +67,10 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'properties', label: 'Properties', icon: MapPin },
     { id: 'technicians', label: 'Technicians', icon: HardHat },
+    { id: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'parts-requests', label: 'Parts Requests', icon: ClipboardList },
+    { id: 'movements', label: 'Stock Movements', icon: History },
+    { id: 'purchasing', label: 'Purchasing', icon: ShoppingCart },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'billing', label: 'Quotes & Invoices', icon: FileText },
     { id: 'brand', label: 'Brand Settings', icon: Settings },
