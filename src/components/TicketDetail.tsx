@@ -31,7 +31,8 @@ import {
   Zap,
   Sparkles,
   Check,
-  X
+  X,
+  Box
 } from 'lucide-react';
 import { formatDate, cn, formatCurrency } from '../lib/utils';
 import { STATUS_LABELS } from '../constants';
@@ -184,6 +185,83 @@ const WorkAuthorizationPanel: React.FC<{ ticket: Ticket; allowSign: boolean }> =
   );
 };
 
+const AssetLinkPanel: React.FC<{ ticket: Ticket; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void }> = ({ ticket, handleChange, handleSave }) => {
+  const { assets } = useApp();
+  const propertyAssets = assets.filter(a => a.propertyId === ticket.propertyId);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const selectedAsset = assets.find(a => a.id === ticket.assetId);
+
+  return (
+    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-6">
+        <h4 className="flex items-center gap-2 font-bold text-gray-900">
+          <Box className="h-5 w-5 text-blue-600" />
+          Linked Asset
+        </h4>
+        <button 
+          onClick={() => setIsEditing(!isEditing)}
+          className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+        >
+          {isEditing ? 'Cancel' : selectedAsset ? 'Change' : 'Link Asset'}
+        </button>
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-4">
+          <select 
+            className="w-full rounded-xl border-gray-200 text-sm focus:ring-blue-500"
+            value={ticket.assetId || ''}
+            onChange={(e) => {
+              const assetId = e.target.value;
+              const asset = assets.find(a => a.id === assetId);
+              handleChange('assetId', assetId);
+              handleChange('assetLabel', asset?.label || '');
+            }}
+          >
+            <option value="">No Asset Linked</option>
+            {propertyAssets.map(asset => (
+              <option key={asset.id} value={asset.id}>{asset.label} ({asset.assetType})</option>
+            ))}
+          </select>
+          <button 
+            onClick={() => {
+              handleSave();
+              setIsEditing(false);
+            }}
+            className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"
+          >
+            Save Link
+          </button>
+        </div>
+      ) : selectedAsset ? (
+        <div className="flex items-center justify-between p-4 bg-blue-50 rounded-2xl border border-blue-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white rounded-xl shadow-sm">
+              <Box className="h-4 w-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-blue-900">{selectedAsset.label}</p>
+              <p className="text-[10px] text-blue-700 font-medium uppercase tracking-wider">{selectedAsset.assetType} • {selectedAsset.manufacturer} {selectedAsset.model}</p>
+            </div>
+          </div>
+          <div className={cn(
+            "px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+            selectedAsset.status === 'active' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+          )}>
+            {selectedAsset.status}
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-2xl">
+          <p className="text-xs text-gray-400 font-medium">No asset linked to this ticket.</p>
+          <p className="text-[10px] text-gray-400 mt-1">Linking assets helps track service history per equipment.</p>
+        </div>
+      )}
+    </section>
+  );
+};
+
 const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; editedTicket: Partial<Ticket>; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void; onClose: () => void }> = ({ ticket, currentTicket, editedTicket, handleChange, handleSave, handleStatusChange, onClose }) => {
   const { technicians, approveTicket, rejectTicket, quotes, invoices, createQuote, updateQuote, createInvoice, updateInvoice, appointmentRecords, calculateJobCosting } = useApp();
   const [editingFinancial, setEditingFinancial] = useState<'quote' | 'invoice' | null>(null);
@@ -262,6 +340,7 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
       </section>
 
       <div className="grid grid-cols-1 gap-8">
+        <AssetLinkPanel ticket={currentTicket as Ticket} handleChange={handleChange} handleSave={handleSave} />
         <PhotoGallery ticketId={ticket.id} />
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -781,6 +860,8 @@ const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; 
       </section>
 
       <WorkSessionControls ticket={ticket} />
+
+      <AssetLinkPanel ticket={currentTicket as Ticket} handleChange={handleChange} handleSave={handleSave} />
 
       <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200 shadow-sm">
         <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">

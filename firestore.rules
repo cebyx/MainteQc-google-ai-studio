@@ -87,6 +87,7 @@ service cloud.firestore {
              data.serviceAddress is string && data.serviceAddress.size() < 500 &&
              data.createdByEmail is string && data.createdByEmail.size() < 100 &&
              data.createdAt is string && data.createdAt.size() < 50 &&
+             (!('assetId' in data) || (data.assetId is string && data.assetId.size() < 100)) &&
              (!('preferredDate' in data) || (data.preferredDate is string && data.preferredDate.size() < 50)) &&
              (!('preferredTime' in data) || (data.preferredTime is string && data.preferredTime.size() < 50)) &&
              (!('contactPreference' in data) || (data.contactPreference is string && data.contactPreference.size() < 50)) &&
@@ -550,6 +551,54 @@ service cloud.firestore {
              (!('relatedType' in data) || data.relatedType is string);
     }
 
+    function isValidAsset() {
+      let data = request.resource.data;
+      return hasRequiredFields(['name', 'type', 'status', 'propertyId', 'clientId', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.type is string &&
+             data.status in ['active', 'maintenance', 'out_of_order', 'decommissioned'] &&
+             data.propertyId is string &&
+             data.clientId is string &&
+             data.createdAt is string &&
+             data.updatedAt is string &&
+             (!('serialNumber' in data) || data.serialNumber is string) &&
+             (!('modelNumber' in data) || data.modelNumber is string) &&
+             (!('manufacturer' in data) || data.manufacturer is string) &&
+             (!('installDate' in data) || data.installDate is string) &&
+             (!('warrantyExpiry' in data) || data.warrantyExpiry is string) &&
+             (!('location' in data) || data.location is string) &&
+             (!('metadata' in data) || data.metadata is map);
+    }
+
+    function isValidAssetComplianceRecord() {
+      let data = request.resource.data;
+      return hasRequiredFields(['assetId', 'type', 'outcome', 'completedDate', 'dueDate']) &&
+             data.assetId is string &&
+             data.type is string &&
+             data.outcome in ['pass', 'fail', 'conditional'] &&
+             data.completedDate is string &&
+             data.dueDate is string;
+    }
+
+    function isValidAssetInspectionRecord() {
+      let data = request.resource.data;
+      return hasRequiredFields(['assetId', 'inspectorId', 'inspectionDate', 'status']) &&
+             data.assetId is string &&
+             data.inspectorId is string &&
+             data.inspectionDate is string &&
+             data.status in ['scheduled', 'completed', 'cancelled'];
+    }
+
+    function isValidAssetDocument() {
+      let data = request.resource.data;
+      return hasRequiredFields(['assetId', 'name', 'type', 'url', 'uploadedAt']) &&
+             data.assetId is string &&
+             data.name is string &&
+             data.type in ['manual', 'warranty', 'certificate', 'other'] &&
+             data.url is string &&
+             data.uploadedAt is string;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -856,6 +905,31 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isAdmin();
       allow create: if isAuthenticated() && (isAdmin() || isTechnician()) && isValidFinancialActivity();
       allow update, delete: if isAdmin();
+    }
+
+    match /assets/{assetId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTechnician() || isOwner(resource.data.clientId));
+      allow create: if (isAdmin() || isTechnician()) && isValidAsset();
+      allow update: if (isAdmin() || isTechnician()) && isValidAsset();
+      allow delete: if isAdmin();
+    }
+
+    match /assetComplianceRecords/{recordId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTechnician() || isOwner(resource.data.clientId));
+      allow create, update: if (isAdmin() || isTechnician()) && isValidAssetComplianceRecord();
+      allow delete: if isAdmin();
+    }
+
+    match /assetInspectionRecords/{recordId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTechnician() || isOwner(resource.data.clientId));
+      allow create, update: if (isAdmin() || isTechnician()) && isValidAssetInspectionRecord();
+      allow delete: if isAdmin();
+    }
+
+    match /assetDocuments/{docId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTechnician() || isOwner(resource.data.clientId));
+      allow create, update: if (isAdmin() || isTechnician()) && isValidAssetDocument();
+      allow delete: if isAdmin();
     }
   }
 }

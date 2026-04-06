@@ -7,7 +7,8 @@ import {
   TechnicianAvailabilityRule, BlockedSlot, AppointmentRecord, ScheduleConflict, DispatchSuggestion,
   Vendor, VendorBill, VendorPayment, ExpenseRecord, TechnicianPayProfile, TimesheetApproval, 
   PayrollExportBatch, TaxProfile, FinancialActivity, JobCostSnapshot,
-  AppNotification, AutomationRule, AutomationRunLog, MonthlyClientSummary
+  AppNotification, AutomationRule, AutomationRunLog, MonthlyClientSummary,
+  Asset, AssetComplianceRecord, AssetInspectionRecord, AssetDocument
 } from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -100,6 +101,10 @@ interface AppContextType {
   automationRules: AutomationRule[];
   automationLogs: AutomationRunLog[];
   monthlySummaries: MonthlyClientSummary[];
+  assets: Asset[];
+  assetComplianceRecords: AssetComplianceRecord[];
+  assetInspectionRecords: AssetInspectionRecord[];
+  assetDocuments: AssetDocument[];
   loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
@@ -129,6 +134,13 @@ interface AppContextType {
   deleteAutomationRule: (id: string) => Promise<void>;
   runAutomationRule: (id: string) => Promise<void>;
   generateMonthlySummary: (clientId: string, month: string) => Promise<void>;
+  createAsset: (asset: Omit<Asset, 'id' | 'createdAt'>) => Promise<void>;
+  updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
+  deleteAsset: (id: string) => Promise<void>;
+  createComplianceRecord: (record: Omit<AssetComplianceRecord, 'id' | 'createdAt'>) => Promise<void>;
+  updateComplianceRecord: (id: string, updates: Partial<AssetComplianceRecord>) => Promise<void>;
+  createInspectionRecord: (record: Omit<AssetInspectionRecord, 'id'>) => Promise<void>;
+  uploadAssetDocument: (assetId: string, file: File, title: string, type: AssetDocument['type']) => Promise<void>;
   approveTicket: (id: string) => Promise<void>;
   rejectTicket: (id: string) => Promise<void>;
   rescheduleTicket: (id: string, date: string, time: string) => Promise<void>;
@@ -277,6 +289,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
   const [automationLogs, setAutomationLogs] = useState<AutomationRunLog[]>([]);
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlyClientSummary[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetComplianceRecords, setAssetComplianceRecords] = useState<AssetComplianceRecord[]>([]);
+  const [assetInspectionRecords, setAssetInspectionRecords] = useState<AssetInspectionRecord[]>([]);
+  const [assetDocuments, setAssetDocuments] = useState<AssetDocument[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -756,6 +772,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setMonthlySummaries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MonthlyClientSummary)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'monthlySummaries'));
 
+    // Listen to Assets
+    let assetsQuery;
+    if (role === 'ADMIN') {
+      assetsQuery = collection(db, 'assets');
+    } else {
+      assetsQuery = query(collection(db, 'assets'), where('clientId', '==', currentUser.id));
+    }
+    const unsubAssets = onSnapshot(assetsQuery, (snapshot) => {
+      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Asset)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'assets'));
+
+    // Listen to Asset Compliance Records
+    const unsubCompliance = onSnapshot(collection(db, 'assetComplianceRecords'), (snapshot) => {
+      setAssetComplianceRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AssetComplianceRecord)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'assetComplianceRecords'));
+
+    // Listen to Asset Inspection Records
+    const unsubInspections = onSnapshot(collection(db, 'assetInspectionRecords'), (snapshot) => {
+      setAssetInspectionRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AssetInspectionRecord)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'assetInspectionRecords'));
+
+    // Listen to Asset Documents
+    const unsubAssetDocs = onSnapshot(collection(db, 'assetDocuments'), (snapshot) => {
+      setAssetDocuments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AssetDocument)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'assetDocuments'));
+
     setLoading(false);
 
     return () => {
@@ -801,6 +843,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubAutomationRules();
       unsubAutomationLogs();
       unsubMonthlySummaries();
+      unsubAssets();
+      unsubCompliance();
+      unsubInspections();
+      unsubAssetDocs();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -1581,6 +1627,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await addDoc(collection(db, 'monthlySummaries'), summary);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'monthlySummaries');
+    }
+  };
+
+  const createAsset = async (asset: Omit<Asset, 'id' | 'createdAt'>) => {
+    try {
+      const newAsset = {
+        ...asset,
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'assets'), newAsset);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'assets');
+    }
+  };
+
+  const updateAsset = async (id: string, updates: Partial<Asset>) => {
+    try {
+      await updateDoc(doc(db, 'assets', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `assets/${id}`);
+    }
+  };
+
+  const deleteAsset = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'assets', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `assets/${id}`);
+    }
+  };
+
+  const createComplianceRecord = async (record: Omit<AssetComplianceRecord, 'id' | 'createdAt'>) => {
+    try {
+      const newRecord = {
+        ...record,
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'assetComplianceRecords'), newRecord);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'assetComplianceRecords');
+    }
+  };
+
+  const updateComplianceRecord = async (id: string, updates: Partial<AssetComplianceRecord>) => {
+    try {
+      await updateDoc(doc(db, 'assetComplianceRecords', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `assetComplianceRecords/${id}`);
+    }
+  };
+
+  const createInspectionRecord = async (record: Omit<AssetInspectionRecord, 'id'>) => {
+    try {
+      await addDoc(collection(db, 'assetInspectionRecords'), record);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'assetInspectionRecords');
+    }
+  };
+
+  const uploadAssetDocument = async (assetId: string, file: File, title: string, type: AssetDocument['type']) => {
+    try {
+      const storagePath = `assets/${assetId}/documents/${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+
+      const newDoc: Omit<AssetDocument, 'id'> = {
+        assetId,
+        title,
+        type,
+        url,
+        uploadedAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'assetDocuments'), newDoc);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'assetDocuments');
     }
   };
 
@@ -2939,6 +3061,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       technicianAvailabilityRules, technicianBlockedSlots, appointmentRecords,
       vendors, vendorBills, vendorPayments, expenses, technicianPayProfiles, timesheetApprovals, payrollBatches, taxProfiles, financialActivities,
       notifications, automationRules, automationLogs, monthlySummaries,
+      assets, assetComplianceRecords, assetInspectionRecords, assetDocuments,
       loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
@@ -2956,6 +3079,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, 
       createNotification, markNotificationRead, dismissNotification, createSystemMessage, 
       createAutomationRule, updateAutomationRule, deleteAutomationRule, runAutomationRule, generateMonthlySummary,
+      createAsset, updateAsset, deleteAsset, createComplianceRecord, updateComplianceRecord, createInspectionRecord, uploadAssetDocument,
       approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead
     }}>

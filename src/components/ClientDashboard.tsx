@@ -58,6 +58,9 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 3);
 
+  const { assets } = useApp();
+  const myAssets = assets.filter(a => a.clientId === currentUser.id);
+
   const mySummaries = serviceSummaries
     .filter(s => myTickets.some(t => t.id === s.ticketId) && s.isSharedWithClient)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -70,10 +73,16 @@ export const ClientDashboard: React.FC<{ setActiveTab: (tab: string) => void }> 
         <div className="relative z-10">
           <h2 className="text-2xl font-bold">Hello, {currentUser.fullName.split(' ')[0]}!</h2>
           <p className="mt-1 text-blue-100 opacity-90">How can we help you today?</p>
-          <button onClick={() => setActiveTab('request')} className="mt-6 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-blue-700 shadow-lg transition-transform active:scale-95">
-            <Plus className="h-5 w-5" />
-            Request New Service
-          </button>
+          <div className="flex flex-wrap gap-3 mt-6">
+            <button onClick={() => setActiveTab('request')} className="flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-blue-700 shadow-lg transition-transform active:scale-95">
+              <Plus className="h-5 w-5" />
+              Request New Service
+            </button>
+            <button onClick={() => setActiveTab('assets')} className="flex items-center gap-2 rounded-full bg-blue-500/30 backdrop-blur-md border border-white/20 px-6 py-3 text-sm font-bold text-white shadow-lg transition-transform active:scale-95">
+              <FolderOpen className="h-5 w-5" />
+              My Equipment ({myAssets.length})
+            </button>
+          </div>
         </div>
         <div className="absolute -right-8 -top-8 h-48 w-48 rounded-full bg-white/10 blur-3xl"></div>
         <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-blue-400/20 blur-2xl"></div>

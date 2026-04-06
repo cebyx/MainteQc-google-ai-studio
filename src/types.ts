@@ -145,6 +145,8 @@ export interface Ticket {
   clientName: string;
   propertyId: string;
   propertyNickname: string;
+  assetId?: string;
+  assetLabel?: string;
   serviceAddress: string;
   preferredDate: string;
   preferredTime: string;
@@ -169,6 +171,7 @@ export interface Quote {
   ticketId: string;
   clientId: string;
   propertyId: string;
+  assetId?: string;
   status: 'draft' | 'sent' | 'accepted' | 'declined';
   lineItems: { description: string; quantity: number; rate: number; total: number }[];
   subtotal: number;
@@ -192,6 +195,7 @@ export interface Invoice {
   ticketId: string;
   clientId: string;
   propertyId: string;
+  assetId?: string;
   status: 'draft' | 'unpaid' | 'paid' | 'overdue' | 'partially_paid';
   lineItems: { description: string; quantity: number; rate: number; total: number }[];
   subtotal: number;
@@ -253,6 +257,7 @@ export type AttachmentCategory =
 export interface Attachment {
   id: string;
   ticketId: string;
+  assetId?: string;
   uploadedById: string;
   uploadedByRole: UserRole;
   fileName: string;
@@ -270,6 +275,7 @@ export interface Attachment {
 export interface MaterialUsed {
   id: string;
   ticketId: string;
+  assetId?: string;
   description: string;
   quantity: number;
   unitCost: number;
@@ -282,6 +288,7 @@ export interface MaterialUsed {
 export interface ServiceSummary {
   id: string;
   ticketId: string;
+  assetId?: string;
   completedById: string;
   completedByName: string;
   completionTimestamp: string;
@@ -321,6 +328,7 @@ export interface MaintenancePlan {
   id: string;
   clientId: string;
   propertyId: string;
+  assetId?: string;
   title: string;
   description: string;
   category: string;
@@ -562,6 +570,8 @@ export interface VendorBill {
   notes: string;
   purchaseOrderId?: string; // Link to PartsRequest or similar
   ticketId?: string; // If bill is job-specific
+  propertyId?: string;
+  assetId?: string;
 }
 
 export interface VendorPayment {
@@ -589,6 +599,7 @@ export interface ExpenseRecord {
   vendorId?: string;
   ticketId?: string;
   propertyId?: string;
+  assetId?: string;
   technicianId?: string;
   notes: string;
   paymentSource: string;
@@ -666,6 +677,7 @@ export interface FinancialActivity {
 export interface JobCostSnapshot {
   id: string;
   ticketId: string;
+  assetId?: string;
   revenue: number;
   laborCost: number;
   materialCost: number;
@@ -739,10 +751,85 @@ export interface MonthlyClientSummary {
 
 export interface SearchResult {
   id: string;
-  type: string;
+  type: 'ticket' | 'client' | 'property' | 'invoice' | 'quote' | 'inventory' | 'asset';
   title: string;
   subtitle: string;
   link: string;
   matchReason: string;
   metadata?: Record<string, any>;
+}
+
+export interface Asset {
+  id: string;
+  propertyId: string;
+  clientId: string;
+  label: string;
+  nickname?: string;
+  assetType: string;
+  category: string;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  installDate?: string;
+  installYear?: number;
+  locationWithinProperty: string;
+  status: 'active' | 'offline' | 'under_repair' | 'replacement_pending' | 'decommissioned';
+  serviceLevel: string;
+  notes: string;
+  metadata: Record<string, any>;
+  createdAt: string;
+}
+
+export interface AssetComplianceRecord {
+  id: string;
+  assetId: string;
+  propertyId: string;
+  recordType: string;
+  dueDate: string;
+  completedDate?: string;
+  performedBy?: string;
+  witness?: string;
+  outcome: 'passed' | 'failed' | 'pending';
+  deficiencyNotes?: string;
+  followUpRequired: boolean;
+  nextDueDate?: string;
+  attachments?: string[];
+  visibility: 'internal' | 'client';
+  createdAt: string;
+}
+
+export interface AssetInspectionRecord {
+  id: string;
+  assetId: string;
+  ticketId?: string;
+  inspectorId: string;
+  inspectorName: string;
+  timestamp: string;
+  items: {
+    label: string;
+    status: 'pass' | 'fail' | 'na';
+    notes?: string;
+  }[];
+  overallStatus: 'pass' | 'fail' | 'conditional';
+  notes: string;
+}
+
+export interface AssetDocument {
+  id: string;
+  assetId: string;
+  title: string;
+  type: 'manual' | 'warranty' | 'permit' | 'certification' | 'other';
+  url: string;
+  uploadedAt: string;
+}
+
+export interface AssetSnapshot {
+  id: string;
+  assetId: string;
+  timestamp: string;
+  status: string;
+  totalJobs: number;
+  totalCost: number;
+  totalRevenue: number;
+  uptimePercentage?: number;
 }

@@ -19,7 +19,8 @@ import {
   ClipboardList,
   AlertTriangle,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Box
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { formatCurrency, formatDate } from '../lib/utils';
@@ -185,6 +186,10 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
                     {lowStockAlerts}
                   </span>
                 )}
+              </button>
+              <button onClick={() => setActiveTab('assets')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-blue-50 hover:border-blue-100 group">
+                <Box className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Assets</span>
               </button>
               <button onClick={() => setActiveTab('parts-requests')} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:bg-purple-50 hover:border-purple-100 group relative">
                 <ClipboardList className="h-6 w-6 text-purple-600 group-hover:scale-110 transition-transform" />

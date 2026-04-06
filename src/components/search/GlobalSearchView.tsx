@@ -33,7 +33,7 @@ export const GlobalSearchView: React.FC<{ setActiveTab: (tab: string) => void }>
   } = useApp();
   
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'tickets' | 'clients' | 'billing' | 'inventory'>('all');
+  const [filter, setFilter] = useState<'all' | 'tickets' | 'clients' | 'billing' | 'inventory' | 'assets'>('all');
 
   const results = useMemo(() => {
     if (!query || query.length < 2) return [];
@@ -138,12 +138,29 @@ export const GlobalSearchView: React.FC<{ setActiveTab: (tab: string) => void }>
       });
     }
 
+    // 6. Assets
+    const { assets } = useApp();
+    assets.forEach(asset => {
+      if (asset.label.toLowerCase().includes(q) || asset.manufacturer?.toLowerCase().includes(q) || asset.model?.toLowerCase().includes(q) || asset.serialNumber?.toLowerCase().includes(q)) {
+        matches.push({
+          id: asset.id,
+          type: 'asset',
+          title: asset.label,
+          subtitle: `${asset.manufacturer} ${asset.model} • ${asset.assetType}`,
+          link: '/assets',
+          metadata: { status: asset.status, serial: asset.serialNumber },
+          matchReason: 'Label, Manufacturer, or Model match'
+        });
+      }
+    });
+
     // Filter by category
     if (filter === 'all') return matches;
     if (filter === 'tickets') return matches.filter(m => m.type === 'ticket');
     if (filter === 'clients') return matches.filter(m => m.type === 'client');
     if (filter === 'billing') return matches.filter(m => m.type === 'invoice' || m.type === 'quote');
     if (filter === 'inventory') return matches.filter(m => m.type === 'inventory');
+    if (filter === 'assets') return matches.filter(m => m.type === 'asset');
 
     return matches;
   }, [query, tickets, clients, properties, invoices, quotes, inventoryItems, role, filter]);
@@ -154,7 +171,8 @@ export const GlobalSearchView: React.FC<{ setActiveTab: (tab: string) => void }>
     property: MapPin,
     invoice: FileText,
     quote: FileText,
-    inventory: Package
+    inventory: Package,
+    asset: LayoutGrid
   };
 
   const typeColors = {
@@ -163,7 +181,8 @@ export const GlobalSearchView: React.FC<{ setActiveTab: (tab: string) => void }>
     property: 'text-amber-600 bg-amber-50',
     invoice: 'text-green-600 bg-green-50',
     quote: 'text-cyan-600 bg-cyan-50',
-    inventory: 'text-orange-600 bg-orange-50'
+    inventory: 'text-orange-600 bg-orange-50',
+    asset: 'text-indigo-600 bg-indigo-50'
   };
 
   return (
@@ -240,6 +259,15 @@ export const GlobalSearchView: React.FC<{ setActiveTab: (tab: string) => void }>
         >
           Inventory
         </button>
+        <button 
+          onClick={() => setFilter('assets')}
+          className={cn(
+            "px-4 py-2 rounded-xl text-sm font-bold transition-all",
+            filter === 'assets' ? "bg-indigo-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+          )}
+        >
+          Assets
+        </button>
       </div>
 
       {/* Results */}
@@ -276,7 +304,8 @@ export const GlobalSearchView: React.FC<{ setActiveTab: (tab: string) => void }>
                       property: 'properties',
                       invoice: 'billing',
                       quote: 'billing',
-                      inventory: 'inventory'
+                      inventory: 'inventory',
+                      asset: 'assets'
                     };
                     setActiveTab(tabMap[result.type] || 'dashboard');
                   }}

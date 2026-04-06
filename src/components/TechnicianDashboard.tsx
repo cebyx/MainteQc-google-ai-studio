@@ -15,7 +15,8 @@ import {
   Package,
   ClipboardCheck,
   Play,
-  Square
+  Square,
+  Box
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { cn, formatDate } from '../lib/utils';
@@ -23,7 +24,7 @@ import { TicketDetail } from './TicketDetail';
 import { Ticket, ActivityEvent, Message, WorkSession } from '../types';
 import { motion } from 'motion/react';
 
-export const TechnicianDashboard: React.FC = () => {
+export const TechnicianDashboard: React.FC<{ setActiveTab: (tab: string) => void }> = ({ setActiveTab }) => {
   const { 
     tickets, 
     currentUser, 
@@ -178,20 +179,38 @@ export const TechnicianDashboard: React.FC = () => {
       ) : null}
 
       {/* Quick Tools Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <button 
+          onClick={() => setActiveTab('field-tools')}
+          className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group"
+        >
           <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Zap className="h-5 w-5" />
           </div>
           <span className="text-xs font-bold text-gray-700">Field Tools</span>
         </button>
-        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+        <button 
+          onClick={() => setActiveTab('inventory')}
+          className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group"
+        >
           <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Package className="h-5 w-5" />
           </div>
           <span className="text-xs font-bold text-gray-700">Inventory</span>
         </button>
-        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+        <button 
+          onClick={() => setActiveTab('assets')}
+          className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group"
+        >
+          <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Box className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-bold text-gray-700">Assets</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('checklists')}
+          className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group"
+        >
           <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
             <ClipboardCheck className="h-5 w-5" />
           </div>
@@ -200,7 +219,10 @@ export const TechnicianDashboard: React.FC = () => {
             <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500"></span>
           )}
         </button>
-        <button className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group">
+        <button 
+          onClick={() => setActiveTab('time')}
+          className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center gap-2 hover:bg-blue-50 transition-colors group"
+        >
           <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Clock className="h-5 w-5" />
           </div>

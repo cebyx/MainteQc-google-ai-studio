@@ -42,11 +42,14 @@ import { GlobalSearchView } from './components/search/GlobalSearchView';
 import { NotificationCenterView } from './components/notifications/NotificationCenterView';
 import { MonthlySummaryView } from './components/client/MonthlySummaryView';
 import { TechnicianAssistantPanel } from './components/ai/TechnicianAssistantPanel';
+import { AssetRegistryView } from './components/assets/AssetRegistryView';
+import { AssetDetailView } from './components/assets/AssetDetailView';
 import { Shield, Wrench, User, LogIn, LogOut, Clock, Sparkles, Search as SearchIcon, Bell } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { role, currentUser, login, logout, isAuthReady } = useApp();
   const [activeTab, setActiveTab] = useState(role === 'TECHNICIAN' ? 'today' : 'dashboard');
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   
   // Handle invitation token from URL
   const [inviteToken, setInviteToken] = useState<string | null>(null);
@@ -139,6 +142,8 @@ const AppContent: React.FC = () => {
         case 'ai-center': return <AICenterView />;
         case 'global-search': return <GlobalSearchView setActiveTab={setActiveTab} />;
         case 'notifications': return <NotificationCenterView setActiveTab={setActiveTab} />;
+        case 'assets': return <AssetRegistryView onSelectAsset={(id) => { setSelectedAssetId(id); setActiveTab('asset-detail'); }} />;
+        case 'asset-detail': return <AssetDetailView assetId={selectedAssetId!} onBack={() => setActiveTab('assets')} />;
         default: return <AdminDashboard setActiveTab={setActiveTab} />;
       }
     }
@@ -147,7 +152,7 @@ const AppContent: React.FC = () => {
       switch (activeTab) {
         case 'today': return (
           <>
-            <TechnicianDashboard />
+            <TechnicianDashboard setActiveTab={setActiveTab} />
             <TechnicianAssistantPanel />
           </>
         );
@@ -205,9 +210,21 @@ const AppContent: React.FC = () => {
             <TechnicianAssistantPanel />
           </>
         );
+        case 'assets': return (
+          <>
+            <AssetRegistryView onSelectAsset={(id) => { setSelectedAssetId(id); setActiveTab('asset-detail'); }} />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'asset-detail': return (
+          <>
+            <AssetDetailView assetId={selectedAssetId!} onBack={() => setActiveTab('assets')} />
+            <TechnicianAssistantPanel />
+          </>
+        );
         default: return (
           <>
-            <TechnicianDashboard />
+            <TechnicianDashboard setActiveTab={setActiveTab} />
             <TechnicianAssistantPanel />
           </>
         );
@@ -228,6 +245,8 @@ const AppContent: React.FC = () => {
         case 'global-search': return <GlobalSearchView setActiveTab={setActiveTab} />;
         case 'notifications': return <NotificationCenterView setActiveTab={setActiveTab} />;
         case 'monthly-summary': return <MonthlySummaryView />;
+        case 'assets': return <AssetRegistryView onSelectAsset={(id) => { setSelectedAssetId(id); setActiveTab('asset-detail'); }} />;
+        case 'asset-detail': return <AssetDetailView assetId={selectedAssetId!} onBack={() => setActiveTab('assets')} />;
         default: return <ClientDashboard setActiveTab={setActiveTab} />;
       }
     }
