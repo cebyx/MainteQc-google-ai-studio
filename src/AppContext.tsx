@@ -6,7 +6,8 @@ import {
   WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction, StockMovement,
   TechnicianAvailabilityRule, BlockedSlot, AppointmentRecord, ScheduleConflict, DispatchSuggestion,
   Vendor, VendorBill, VendorPayment, ExpenseRecord, TechnicianPayProfile, TimesheetApproval, 
-  PayrollExportBatch, TaxProfile, FinancialActivity, JobCostSnapshot
+  PayrollExportBatch, TaxProfile, FinancialActivity, JobCostSnapshot,
+  AppNotification, AutomationRule, AutomationRunLog, MonthlyClientSummary
 } from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -95,6 +96,10 @@ interface AppContextType {
   payrollBatches: PayrollExportBatch[];
   taxProfiles: TaxProfile[];
   financialActivities: FinancialActivity[];
+  notifications: AppNotification[];
+  automationRules: AutomationRule[];
+  automationLogs: AutomationRunLog[];
+  monthlySummaries: MonthlyClientSummary[];
   loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
@@ -115,8 +120,15 @@ interface AppContextType {
   createProperty: (property: Omit<Property, 'id'>) => Promise<void>;
   updateProperty: (id: string, updates: Partial<Property>) => Promise<void>;
   logActivity: (activity: Omit<ActivityEvent, 'id' | 'timestamp'>) => Promise<void>;
-  createNotification: (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => Promise<void>;
+  createNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  dismissNotification: (id: string) => Promise<void>;
   createSystemMessage: (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => Promise<void>;
+  createAutomationRule: (rule: Omit<AutomationRule, 'id' | 'createdAt'>) => Promise<void>;
+  updateAutomationRule: (id: string, updates: Partial<AutomationRule>) => Promise<void>;
+  deleteAutomationRule: (id: string) => Promise<void>;
+  runAutomationRule: (id: string) => Promise<void>;
+  generateMonthlySummary: (clientId: string, month: string) => Promise<void>;
   approveTicket: (id: string) => Promise<void>;
   rejectTicket: (id: string) => Promise<void>;
   rescheduleTicket: (id: string, date: string, time: string) => Promise<void>;
@@ -261,6 +273,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [payrollBatches, setPayrollBatches] = useState<PayrollExportBatch[]>([]);
   const [taxProfiles, setTaxProfiles] = useState<TaxProfile[]>([]);
   const [financialActivities, setFinancialActivities] = useState<FinancialActivity[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
+  const [automationLogs, setAutomationLogs] = useState<AutomationRunLog[]>([]);
+  const [monthlySummaries, setMonthlySummaries] = useState<MonthlyClientSummary[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -708,6 +724,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubFinanceActivity = onSnapshot(collection(db, 'financialActivity'), (s) => setFinancialActivities(s.docs.map(d => ({ id: d.id, ...d.data() } as FinancialActivity))), (err) => handleFirestoreError(err, OperationType.LIST, 'financialActivity'));
     }
 
+    // Listen to Notifications
+    const unsubNotifications = onSnapshot(query(collection(db, 'notifications'), where('userId', '==', currentUser.id)), (snapshot) => {
+      setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
+
+    // Listen to Automation Rules (Admin only)
+    let unsubAutomationRules = () => {};
+    if (role === 'ADMIN') {
+      unsubAutomationRules = onSnapshot(collection(db, 'automationRules'), (snapshot) => {
+        setAutomationRules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AutomationRule)));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'automationRules'));
+    }
+
+    // Listen to Automation Logs (Admin only)
+    let unsubAutomationLogs = () => {};
+    if (role === 'ADMIN') {
+      unsubAutomationLogs = onSnapshot(collection(db, 'automationLogs'), (snapshot) => {
+        setAutomationLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AutomationRunLog)));
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'automationLogs'));
+    }
+
+    // Listen to Monthly Summaries
+    let monthlySummariesQuery;
+    if (role === 'ADMIN') {
+      monthlySummariesQuery = collection(db, 'monthlySummaries');
+    } else {
+      monthlySummariesQuery = query(collection(db, 'monthlySummaries'), where('clientId', '==', currentUser.id));
+    }
+    const unsubMonthlySummaries = onSnapshot(monthlySummariesQuery, (snapshot) => {
+      setMonthlySummaries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MonthlyClientSummary)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'monthlySummaries'));
+
     setLoading(false);
 
     return () => {
@@ -749,6 +797,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubPayroll();
       unsubTaxes();
       unsubFinanceActivity();
+      unsubNotifications();
+      unsubAutomationRules();
+      unsubAutomationLogs();
+      unsubMonthlySummaries();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -1152,7 +1204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString(),
         sentDate: quote.status === 'sent' ? new Date().toISOString() : undefined,
       };
-      await addDoc(collection(db, 'quotes'), newQuote);
+      const docRef = await addDoc(collection(db, 'quotes'), newQuote);
       if (quote.status === 'sent') {
         updateTicket(quote.ticketId, { quoteStatus: 'sent' });
         await logActivity({
@@ -1164,7 +1216,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           actorName: currentUser.fullName,
           actorRole: role,
         });
-        await createNotification(quote.ticketId, quote.clientId, 'CLIENT', `A new quote for $${quote.total.toFixed(2)} has been sent for your review.`);
+        await createNotification({
+          userId: quote.clientId,
+          role: 'CLIENT',
+          title: 'New Quote',
+          message: `A new quote for $${quote.total.toFixed(2)} has been sent for your review.`,
+          type: 'billing',
+          priority: 'medium',
+          link: `/billing`,
+          referenceId: docRef.id,
+          referenceType: 'quote'
+        });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'quotes');
@@ -1254,7 +1316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         balanceRemaining: invoice.balanceRemaining !== undefined ? invoice.balanceRemaining : invoice.total,
         createdAt: new Date().toISOString(),
       };
-      await addDoc(collection(db, 'invoices'), newInvoice);
+      const docRef = await addDoc(collection(db, 'invoices'), newInvoice);
       if (invoice.status === 'unpaid') {
         updateTicket(invoice.ticketId, { invoiceStatus: 'unpaid' });
         await logActivity({
@@ -1266,7 +1328,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           actorName: currentUser.fullName,
           actorRole: role,
         });
-        await createNotification(invoice.ticketId, invoice.clientId, 'CLIENT', `A new invoice for $${invoice.total.toFixed(2)} is now available.`);
+        await createNotification({
+          userId: invoice.clientId,
+          role: 'CLIENT',
+          title: 'New Invoice',
+          message: `A new invoice for $${invoice.total.toFixed(2)} is now available.`,
+          type: 'billing',
+          priority: 'medium',
+          link: `/billing`,
+          referenceId: docRef.id,
+          referenceType: 'invoice'
+        });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'invoices');
@@ -1407,9 +1479,109 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const createNotification = async (ticketId: string, recipientId: string, recipientRole: UserRole, text: string) => {
-    // Legacy support, now uses createSystemMessage
-    return createSystemMessage(ticketId, recipientId, recipientRole, text);
+  const createNotification = async (notification: Omit<AppNotification, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      const newNotification = {
+        ...notification,
+        status: 'unread',
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'notifications'), newNotification);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'notifications');
+    }
+  };
+
+  const markNotificationRead = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', id), { status: 'read' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `notifications/${id}`);
+    }
+  };
+
+  const dismissNotification = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', id), { status: 'dismissed' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `notifications/${id}`);
+    }
+  };
+
+  const createAutomationRule = async (rule: Omit<AutomationRule, 'id' | 'createdAt'>) => {
+    try {
+      const newRule = {
+        ...rule,
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, 'automationRules'), newRule);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'automationRules');
+    }
+  };
+
+  const updateAutomationRule = async (id: string, updates: Partial<AutomationRule>) => {
+    try {
+      await updateDoc(doc(db, 'automationRules', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `automationRules/${id}`);
+    }
+  };
+
+  const deleteAutomationRule = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'automationRules', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `automationRules/${id}`);
+    }
+  };
+
+  const runAutomationRule = async (id: string) => {
+    const rule = automationRules.find(r => r.id === id);
+    if (!rule || !rule.isActive) return;
+
+    try {
+      await updateDoc(doc(db, 'automationRules', id), { lastRunAt: new Date().toISOString() });
+      
+      await addDoc(collection(db, 'automationLogs'), {
+        ruleId: id,
+        ruleName: rule.name,
+        status: 'success',
+        message: 'Rule executed successfully (simulated)',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Failed to run automation rule', error);
+    }
+  };
+
+  const generateMonthlySummary = async (clientId: string, month: string) => {
+    try {
+      const monthTickets = tickets.filter(t => t.clientId === clientId && t.createdAt.startsWith(month));
+      const monthInvoices = invoices.filter(i => i.clientId === clientId && i.createdAt.startsWith(month));
+      const monthPlans = maintenancePlans.filter(p => p.clientId === clientId);
+
+      const stats = {
+        jobsCompleted: monthTickets.filter(t => t.status === 'completed').length,
+        openInvoices: monthInvoices.filter(i => i.status === 'unpaid' || i.status === 'overdue').length,
+        upcomingMaintenance: monthPlans.filter(p => p.status === 'active' && p.nextDueDate.startsWith(month)).length,
+        totalSpent: monthInvoices.reduce((sum, i) => sum + i.total, 0),
+      };
+
+      const summary: Omit<MonthlyClientSummary, 'id'> = {
+        clientId,
+        month,
+        summary: `In ${month}, we completed ${stats.jobsCompleted} jobs for you. You have ${stats.openInvoices} open invoices and ${stats.upcomingMaintenance} maintenance visits scheduled for this month.`,
+        stats,
+        highlights: monthTickets.map(t => t.title).slice(0, 3),
+        actionItems: monthInvoices.filter(i => i.status === 'unpaid').map(i => `Pay invoice #${i.id.slice(-6)}`),
+        createdAt: new Date().toISOString(),
+      };
+
+      await addDoc(collection(db, 'monthlySummaries'), summary);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'monthlySummaries');
+    }
   };
 
   const rescheduleTicket = async (id: string, date: string, time: string) => {
@@ -1426,32 +1598,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           actorName: currentUser.fullName,
           actorRole: role,
         });
-        await createNotification(id, ticket.clientId, 'CLIENT', `Your appointment for ticket #${id.slice(-6)} has been rescheduled to ${date} at ${time}.`);
+        await createNotification({
+          userId: ticket.clientId,
+          role: 'CLIENT',
+          title: 'Appointment Rescheduled',
+          message: `Your appointment for ticket #${id.slice(-6)} has been rescheduled to ${date} at ${time}.`,
+          type: 'schedule',
+          priority: 'medium',
+          link: `/appointments`,
+          referenceId: id,
+          referenceType: 'ticket'
+        });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
     }
   };
 
-  const assignTechnician = async (id: string, techId: string, techName: string) => {
+  const assignTechnician = async (ticketId: string, technicianId: string, technicianName: string, scheduledDate?: string, scheduledTime?: string) => {
     try {
-      await updateDoc(doc(db, 'tickets', id), { assignedTechnicianId: techId, assignedTechnicianName: techName });
-      const ticket = tickets.find(t => t.id === id);
+      const updates: any = {
+        assignedTechnicianId: technicianId,
+        assignedTechnicianName: technicianName,
+        status: 'scheduled'
+      };
+      if (scheduledDate) updates.scheduledDate = scheduledDate;
+      if (scheduledTime) updates.scheduledTime = scheduledTime;
+
+      await updateDoc(doc(db, 'tickets', ticketId), updates);
+      
+      const ticket = tickets.find(t => t.id === ticketId);
       if (ticket) {
         await logActivity({
-          ticketId: id,
+          ticketId,
           clientId: ticket.clientId,
-          type: 'technician_assigned',
-          description: `Technician ${techName} assigned to ticket`,
+          type: 'job_assigned',
+          description: `Job assigned to ${technicianName}`,
           actorId: currentUser.id,
           actorName: currentUser.fullName,
           actorRole: role,
         });
-        await createNotification(id, techId, 'TECHNICIAN', `You have been assigned to ticket #${id.slice(-6)}.`);
-        await createNotification(id, ticket.clientId, 'CLIENT', `Technician ${techName} has been assigned to your ticket.`);
+
+        await createNotification({
+          userId: technicianId,
+          role: 'TECHNICIAN',
+          title: 'New Job Assigned',
+          message: `You have been assigned to: ${ticket.title}`,
+          type: 'dispatch',
+          priority: 'high',
+          link: `/my-jobs`,
+          referenceId: ticketId,
+          referenceType: 'ticket'
+        });
+        
+        await createNotification({
+          userId: ticket.clientId,
+          role: 'CLIENT',
+          title: 'Technician Assigned',
+          message: `Technician ${technicianName} has been assigned to your ticket.`,
+          type: 'dispatch',
+          priority: 'medium',
+          link: `/appointments`,
+          referenceId: ticketId,
+          referenceType: 'ticket'
+        });
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
+      handleFirestoreError(error, OperationType.UPDATE, `tickets/${ticketId}`);
     }
   };
 
@@ -1753,12 +1966,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const q = query(collection(db, 'users'), where('email', '==', member.clientId)); // Wait, clientId is usually uid.
       // Actually, ClientMember.clientId is the UID of the user.
       
-      await createNotification(
-        'system',
-        member.clientId,
-        'CLIENT',
-        `You have been invited to join the team for account #${member.accountId.slice(-6)}.`
-      );
+      await createNotification({
+        userId: member.clientId,
+        role: 'CLIENT',
+        title: 'Team Invitation',
+        message: `You have been invited to join the team for account #${member.accountId.slice(-6)}.`,
+        type: 'system',
+        priority: 'medium',
+        link: '/profile'
+      });
 
       await logActivity({
         ticketId: 'system',
@@ -2722,6 +2938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workSessions, inventoryItems, technicianStock, partsRequests, checklistTemplates, ticketChecklists, pendingSyncQueue, stockMovements,
       technicianAvailabilityRules, technicianBlockedSlots, appointmentRecords,
       vendors, vendorBills, vendorPayments, expenses, technicianPayProfiles, timesheetApprovals, payrollBatches, taxProfiles, financialActivities,
+      notifications, automationRules, automationLogs, monthlySummaries,
       loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
@@ -2736,7 +2953,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createAppointmentProposal, confirmAppointment, requestAppointmentReschedule, cancelAppointment, createBlockedSlot, updateBlockedSlot, removeBlockedSlot, updateTechnicianAvailabilityRule, getTechnicianCapacityForDay,
       createVendor, updateVendor, createVendorBill, updateVendorBill, recordVendorPayment, createExpense, updateExpense, approveTimesheet, createPayrollBatch, createTaxProfile, updateTaxProfile, logFinancialActivity, calculateJobCosting,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
-      createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
+      createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, 
+      createNotification, markNotificationRead, dismissNotification, createSystemMessage, 
+      createAutomationRule, updateAutomationRule, deleteAutomationRule, runAutomationRule, generateMonthlySummary,
+      approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead
     }}>
       {children}

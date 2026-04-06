@@ -37,7 +37,12 @@ import MaintenancePlansView from './components/maintenance/MaintenancePlansView'
 import RecurringWorkQueue from './components/maintenance/RecurringWorkQueue';
 import ClientTeamView from './components/clients/ClientTeamView';
 import InviteAcceptanceView from './components/clients/InviteAcceptanceView';
-import { Shield, Wrench, User, LogIn, LogOut, Clock } from 'lucide-react';
+import { AICenterView } from './components/ai/AICenterView';
+import { GlobalSearchView } from './components/search/GlobalSearchView';
+import { NotificationCenterView } from './components/notifications/NotificationCenterView';
+import { MonthlySummaryView } from './components/client/MonthlySummaryView';
+import { TechnicianAssistantPanel } from './components/ai/TechnicianAssistantPanel';
+import { Shield, Wrench, User, LogIn, LogOut, Clock, Sparkles, Search as SearchIcon, Bell } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { role, currentUser, login, logout, isAuthReady } = useApp();
@@ -131,21 +136,81 @@ const AppContent: React.FC = () => {
         case 'expenses': return <ExpensesView />;
         case 'payroll': return <PayrollView />;
         case 'fin-reports': return <FinancialReportsView />;
+        case 'ai-center': return <AICenterView />;
+        case 'global-search': return <GlobalSearchView setActiveTab={setActiveTab} />;
+        case 'notifications': return <NotificationCenterView setActiveTab={setActiveTab} />;
         default: return <AdminDashboard setActiveTab={setActiveTab} />;
       }
     }
     
     if (role === 'TECHNICIAN') {
       switch (activeTab) {
-        case 'today': return <TechnicianDashboard />;
-        case 'my-jobs': return <MyJobsView />;
-        case 'field-tools': return <FieldToolsView />;
-        case 'inventory': return <InventoryView />;
-        case 'time': return <TimeTrackingView />;
-        case 'messages': return <MessagesView />;
-        case 'records': return <DocumentsCenter />;
-        case 'profile': return <ProfileView />;
-        default: return <TechnicianDashboard />;
+        case 'today': return (
+          <>
+            <TechnicianDashboard />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'my-jobs': return (
+          <>
+            <MyJobsView />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'field-tools': return (
+          <>
+            <FieldToolsView />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'inventory': return (
+          <>
+            <InventoryView />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'time': return (
+          <>
+            <TimeTrackingView />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'messages': return (
+          <>
+            <MessagesView />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'records': return (
+          <>
+            <DocumentsCenter />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'profile': return (
+          <>
+            <ProfileView />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'global-search': return (
+          <>
+            <GlobalSearchView setActiveTab={setActiveTab} />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        case 'notifications': return (
+          <>
+            <NotificationCenterView setActiveTab={setActiveTab} />
+            <TechnicianAssistantPanel />
+          </>
+        );
+        default: return (
+          <>
+            <TechnicianDashboard />
+            <TechnicianAssistantPanel />
+          </>
+        );
       }
     }
     
@@ -160,6 +225,9 @@ const AppContent: React.FC = () => {
         case 'billing': return <BillingView />;
         case 'messages': return <MessagesView />;
         case 'profile': return <ProfileView />;
+        case 'global-search': return <GlobalSearchView setActiveTab={setActiveTab} />;
+        case 'notifications': return <NotificationCenterView setActiveTab={setActiveTab} />;
+        case 'monthly-summary': return <MonthlySummaryView />;
         default: return <ClientDashboard setActiveTab={setActiveTab} />;
       }
     }

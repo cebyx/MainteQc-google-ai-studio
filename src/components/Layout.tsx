@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
+import { NotificationBellPanel } from './notifications/NotificationBellPanel';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -29,7 +30,9 @@ import {
   TrendingUp,
   TrendingDown,
   Receipt,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Sparkles,
+  Bot
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -63,6 +66,8 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
 
   const adminNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'ai-center', label: 'AI Center', icon: Sparkles },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'dispatch', label: 'Dispatch', icon: ClipboardList },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'maintenance', label: 'Maintenance Plans', icon: Wrench },
@@ -89,6 +94,7 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
 
   const techNav = [
     { id: 'today', label: 'Today', icon: Calendar },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'my-jobs', label: 'My Jobs', icon: ClipboardList },
     { id: 'field-tools', label: 'Field Tools', icon: Zap },
     { id: 'inventory', label: 'Inventory', icon: Package },
@@ -100,6 +106,8 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
 
   const clientNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'monthly-summary', label: 'Monthly Summary', icon: Sparkles },
     { id: 'request', label: 'Request Service', icon: Plus },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'history', label: 'History', icon: ClipboardList },
@@ -168,14 +176,12 @@ export const Layout: React.FC<{ children: React.ReactNode; activeTab: string; se
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="Search..." 
+                placeholder="Global Search..." 
+                onFocus={() => setActiveTab('global-search')}
                 className="h-9 w-64 rounded-full border-gray-200 bg-gray-50 pl-9 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>
-            <button className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full">
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500"></span>
-            </button>
+            <NotificationBellPanel setActiveTab={setActiveTab} />
             <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs lg:hidden">
               {currentUser.fullName.charAt(0)}
             </div>

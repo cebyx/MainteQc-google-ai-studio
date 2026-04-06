@@ -17,7 +17,9 @@ import {
   Zap,
   Package,
   ClipboardList,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles,
+  ChevronRight
 } from 'lucide-react';
 import { StatusBadge, UrgencyBadge } from './Badges';
 import { formatCurrency, formatDate } from '../lib/utils';
@@ -131,6 +133,25 @@ export const AdminDashboard: React.FC<{ setActiveTab: (tab: string) => void }> =
 
         {/* Right Column: Back Office & Team */}
         <div className="space-y-8">
+          {/* AI Insights Card */}
+          <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-6 shadow-sm relative overflow-hidden group cursor-pointer" onClick={() => setActiveTab('ai-center')}>
+            <Sparkles className="absolute -right-4 -top-4 h-24 w-24 text-blue-100 rotate-12 group-hover:scale-110 transition-transform" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 bg-blue-600 rounded-xl">
+                  <Zap className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-black text-gray-900 tracking-tight uppercase">AI Insights</h3>
+              </div>
+              <p className="text-xs text-blue-800 font-medium leading-relaxed mb-4">
+                "3 recurring tickets flagged for potential consolidation. 12% increase in HVAC efficiency detected across portfolio."
+              </p>
+              <button className="flex items-center gap-1 text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                Go to AI Center <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
           {/* Back Office Quick Actions */}
           <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-6">

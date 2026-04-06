@@ -677,3 +677,72 @@ export interface JobCostSnapshot {
   margin: number;
   lastUpdated: string;
 }
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  role: UserRole;
+  title: string;
+  message: string;
+  type: 'billing' | 'schedule' | 'dispatch' | 'parts' | 'stock' | 'accounting' | 'system';
+  priority: 'low' | 'medium' | 'high';
+  status: 'unread' | 'read' | 'dismissed';
+  link?: string;
+  referenceId?: string;
+  referenceType?: string;
+  createdAt: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  description: string;
+  trigger: {
+    type: 'invoice_overdue' | 'quote_pending' | 'parts_pending' | 'low_stock' | 'maintenance_due' | 'work_session_threshold' | 'unassigned_ticket';
+    conditions: Record<string, any>;
+  };
+  action: {
+    type: 'create_notification' | 'send_reminder' | 'escalate_ticket' | 'create_task';
+    params: Record<string, any>;
+  };
+  isActive: boolean;
+  lastRunAt?: string;
+  createdAt: string;
+}
+
+export interface AutomationRunLog {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  status: 'success' | 'failed';
+  affectedRecordId?: string;
+  affectedRecordType?: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface MonthlyClientSummary {
+  id: string;
+  clientId: string;
+  month: string; // YYYY-MM
+  summary: string;
+  stats: {
+    jobsCompleted: number;
+    openInvoices: number;
+    upcomingMaintenance: number;
+    totalSpent: number;
+  };
+  highlights: string[];
+  actionItems: string[];
+  createdAt: string;
+}
+
+export interface SearchResult {
+  id: string;
+  type: string;
+  title: string;
+  subtitle: string;
+  link: string;
+  matchReason: string;
+  metadata?: Record<string, any>;
+}
