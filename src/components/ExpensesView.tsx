@@ -182,6 +182,93 @@ const ExpensesView: React.FC = () => {
           </div>
         )}
       </div>
+      {/* Modals */}
+      <AnimatePresence>
+        {showAddExpense && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-900">Record Expense</h2>
+                <button onClick={() => setShowAddExpense(false)} className="text-gray-400 hover:text-gray-600">
+                  <Plus className="w-6 h-6 rotate-45" />
+                </button>
+              </div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const total = parseFloat(formData.get('total') as string);
+                
+                await createExpense({
+                  description: formData.get('description') as string,
+                  category: formData.get('category') as any,
+                  total,
+                  amount: total,
+                  tax: 0,
+                  date: formData.get('date') as string,
+                  status: 'pending',
+                  paymentSource: 'company_card',
+                  isRecurring: false,
+                  notes: formData.get('notes') as string,
+                  technicianId: formData.get('technicianId') as string || '',
+                  ticketId: formData.get('ticketId') as string || '',
+                });
+                setShowAddExpense(false);
+              }} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+                  <input name="description" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                    <select name="category" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                      {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                    <input name="total" type="number" step="0.01" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                  <input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Technician (Optional)</label>
+                    <select name="technicianId" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                      <option value="">None</option>
+                      {technicians.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Ticket ID (Optional)</label>
+                    <input name="ticketId" placeholder="Ticket ID" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea name="notes" rows={2} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowAddExpense(false)} className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">
+                    Record Expense
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

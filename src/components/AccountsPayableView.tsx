@@ -190,7 +190,165 @@ const AccountsPayableView: React.FC = () => {
         </div>
       )}
 
-      {/* Modals would go here */}
+      {/* Modals */}
+      <AnimatePresence>
+        {showAddVendor && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-900">Add New Vendor</h2>
+                <button onClick={() => setShowAddVendor(false)} className="text-gray-400 hover:text-gray-600">
+                  <Plus className="w-6 h-6 rotate-45" />
+                </button>
+              </div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                await createVendor({
+                  name: formData.get('name') as string,
+                  email: formData.get('email') as string,
+                  phone: formData.get('phone') as string,
+                  address: formData.get('address') as string,
+                  category: formData.get('category') as string,
+                  status: 'active',
+                  notes: ''
+                });
+                setShowAddVendor(false);
+              }} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Name *</label>
+                  <input name="name" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input name="email" type="email" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input name="phone" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select name="category" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="Supplies">Supplies</option>
+                    <option value="Equipment">Equipment</option>
+                    <option value="Subcontractor">Subcontractor</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Insurance">Insurance</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <textarea name="address" rows={2} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowAddVendor(false)} className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">
+                    Save Vendor
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showAddBill && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-900">Record Vendor Bill</h2>
+                <button onClick={() => setShowAddBill(false)} className="text-gray-400 hover:text-gray-600">
+                  <Plus className="w-6 h-6 rotate-45" />
+                </button>
+              </div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const vendorId = formData.get('vendorId') as string;
+                const vendor = vendors.find(v => v.id === vendorId);
+                const total = parseFloat(formData.get('total') as string);
+                
+                await createVendorBill({
+                  vendorId,
+                  vendorName: vendor?.name || 'Unknown',
+                  billNumber: formData.get('billNumber') as string,
+                  billDate: formData.get('date') as string,
+                  dueDate: formData.get('dueDate') as string,
+                  subtotal: total,
+                  tax: 0,
+                  total,
+                  amountPaid: 0,
+                  balanceRemaining: total,
+                  status: 'received',
+                  category: formData.get('category') as string,
+                  notes: formData.get('notes') as string,
+                  lineItems: []
+                });
+                setShowAddBill(false);
+              }} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vendor *</label>
+                  <select name="vendorId" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">Select Vendor</option>
+                    {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Bill Number</label>
+                    <input name="billNumber" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                    <input name="total" type="number" step="0.01" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Bill Date *</label>
+                    <input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
+                    <input name="dueDate" type="date" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <input name="category" placeholder="e.g. Parts, Fuel, Rent" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea name="notes" rows={2} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowAddBill(false)} className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">
+                    Record Bill
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

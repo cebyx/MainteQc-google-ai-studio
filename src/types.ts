@@ -157,7 +157,7 @@ export interface Ticket {
   technicianNotes: string;
   completionNotes: string;
   quoteStatus?: 'none' | 'draft' | 'sent' | 'accepted' | 'declined';
-  invoiceStatus?: 'none' | 'draft' | 'sent' | 'unpaid' | 'paid' | 'overdue';
+  invoiceStatus?: 'none' | 'draft' | 'sent' | 'unpaid' | 'paid' | 'overdue' | 'partially_paid';
   authorizationId?: string; // Link to AuthorizationRecord
   jobCosting?: JobCostSnapshot;
   createdAt: string;
@@ -192,7 +192,7 @@ export interface Invoice {
   ticketId: string;
   clientId: string;
   propertyId: string;
-  status: 'draft' | 'unpaid' | 'paid' | 'overdue';
+  status: 'draft' | 'unpaid' | 'paid' | 'overdue' | 'partially_paid';
   lineItems: { description: string; quantity: number; rate: number; total: number }[];
   subtotal: number;
   tax: number;
@@ -549,6 +549,7 @@ export interface VendorBill {
   vendorName: string;
   billNumber: string;
   status: 'draft' | 'received' | 'approved' | 'partially_paid' | 'paid' | 'void';
+  category: string;
   lineItems: { description: string; quantity: number; rate: number; total: number; category: string }[];
   subtotal: number;
   tax: number;
@@ -618,6 +619,7 @@ export interface TimesheetApproval {
   totalRegularHours: number;
   totalTravelHours: number;
   totalOvertimeHours: number;
+  totalHours: number;
   totalPay: number;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
   approvedBy?: string;
@@ -634,7 +636,7 @@ export interface PayrollExportBatch {
   totalAmount: number;
   technicianCount: number;
   employeeCount: number;
-  status: 'draft' | 'exported' | 'paid';
+  status: 'draft' | 'exported' | 'paid' | 'processed';
   createdAt: string;
   exportedAt?: string;
   notes: string;

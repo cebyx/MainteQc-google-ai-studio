@@ -11,6 +11,7 @@ import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval } from 'date
 import { Technician, WorkSession, TimesheetApproval, PayrollExportBatch } from '../types';
 
 const PayrollView: React.FC = () => {
+  const [showRunPayroll, setShowRunPayroll] = useState(false);
   const { 
     technicians, workSessions, timesheetApprovals, payrollBatches,
     approveTimesheet, createPayrollBatch, technicianPayProfiles, currentUser
@@ -18,6 +19,16 @@ const PayrollView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'review' | 'batches' | 'profiles'>('review');
   const [selectedWeek, setSelectedWeek] = useState(startOfWeek(new Date()));
+
+  // Calculate pending payroll
+  const pendingPayroll = useMemo(() => {
+    const approved = timesheetApprovals.filter(a => a.status === 'approved');
+    const total = approved.reduce((sum, a) => sum + (a.totalPay || 0), 0);
+    return {
+      count: approved.length,
+      total
+    };
+  }, [timesheetApprovals]);
 
   // Calculate hours for the selected week
   const weeklyStats = useMemo(() => {
@@ -58,12 +69,64 @@ const PayrollView: React.FC = () => {
             Export CSV
           </button>
           <button 
-            onClick={() => setActiveTab('batches')}
+            onClick={() => setShowRunPayroll(true)}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
           >
-            <Plus className="w-4 h-4" />
-            Create Payroll Batch
+            <Calculator className="w-4 h-4" />
+            Run Payroll
           </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+              <Clock className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Pending Approvals</p>
+              <p className="text-2xl font-bold text-gray-900">{timesheetApprovals.filter(a => a.status === 'pending').length}</p>
+            </div>
+          </div>
+          <div className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded inline-block">
+            Needs Review
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+              <DollarSign className="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Ready for Payroll</p>
+              <p className="text-2xl font-bold text-gray-900">${pendingPayroll.total.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="text-xs text-amber-600 font-bold bg-amber-50 px-2 py-1 rounded inline-block">
+            {pendingPayroll.count} Technicians
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Last Batch</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {payrollBatches.length > 0 
+                  ? `$${payrollBatches[0].totalAmount.toLocaleString()}`
+                  : 'N/A'}
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded inline-block">
+            {payrollBatches.length > 0 ? format(new Date(payrollBatches[0].createdAt), 'MMM d, yyyy') : 'No batches yet'}
+          </div>
         </div>
       </div>
 
@@ -188,6 +251,7 @@ const PayrollView: React.FC = () => {
                               totalRegularHours: stats.onsite,
                               totalTravelHours: stats.travel,
                               totalOvertimeHours: 0,
+                              totalHours: stats.total,
                               totalPay: estPay,
                               status: 'approved',
                               approvedBy: currentUser.id,
@@ -308,6 +372,95 @@ const PayrollView: React.FC = () => {
           </table>
         </div>
       )}
+      {/* Run Payroll Modal */}
+      <AnimatePresence>
+        {showRunPayroll && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-900">Run Payroll Batch</h2>
+                <button onClick={() => setShowRunPayroll(false)} className="text-gray-400 hover:text-gray-600">
+                  <Plus className="w-6 h-6 rotate-45" />
+                </button>
+              </div>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const approved = timesheetApprovals.filter(a => a.status === 'approved');
+                
+                await createPayrollBatch({
+                  batchName: formData.get('batchName') as string,
+                  periodStart: formData.get('periodStart') as string,
+                  periodEnd: formData.get('periodEnd') as string,
+                  totalAmount: pendingPayroll.total,
+                  technicianCount: pendingPayroll.count,
+                  status: 'processed',
+                  items: approved.map(a => ({
+                    technicianId: a.technicianId,
+                    technicianName: a.technicianName,
+                    hours: a.totalHours,
+                    amount: a.totalPay || 0
+                  })) as any
+                } as any);
+                setShowRunPayroll(false);
+              }} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Batch Name *</label>
+                  <input 
+                    name="batchName" 
+                    required 
+                    defaultValue={`Payroll - ${format(new Date(), 'MMM yyyy')}`}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Period Start *</label>
+                    <input name="periodStart" type="date" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Period End *</label>
+                    <input name="periodEnd" type="date" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-blue-700 font-medium">Technicians to Pay</span>
+                    <span className="text-sm font-bold text-blue-900">{pendingPayroll.count}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-blue-700 font-medium">Total Payroll Amount</span>
+                    <span className="text-lg font-bold text-blue-900">${pendingPayroll.total.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 italic">
+                  This will process payments for all approved timesheets in the system.
+                </p>
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowRunPayroll(false)} className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={pendingPayroll.count === 0}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Process Payroll
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

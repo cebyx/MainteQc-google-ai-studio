@@ -14,7 +14,14 @@ import {
 } from 'recharts';
 
 const FinancialReportsView: React.FC = () => {
-  const { invoices, vendorBills, expenses, taxProfiles } = useApp();
+  const { 
+    invoices, 
+    vendorBills, 
+    expenses, 
+    taxProfiles, 
+    workSessions, 
+    technicianPayProfiles 
+  } = useApp();
   const [activeTab, setActiveTab] = useState<'pnl' | 'cashflow' | 'tax'>('pnl');
   const [dateRange, setDateRange] = useState({
     start: startOfMonth(subMonths(new Date(), 5)),
@@ -30,8 +37,8 @@ const FinancialReportsView: React.FC = () => {
       const monthEnd = endOfMonth(date);
       
       const revenue = invoices
-        .filter(inv => inv.status === 'paid' && isWithinInterval(new Date(inv.createdAt), { start: monthStart, end: monthEnd }))
-        .reduce((sum, inv) => sum + inv.total, 0);
+        .filter(inv => (inv.status === 'paid' || inv.status === 'partially_paid') && isWithinInterval(new Date(inv.createdAt), { start: monthStart, end: monthEnd }))
+        .reduce((sum, inv) => sum + (inv.amountPaid || inv.total), 0);
         
       const billExpenses = vendorBills
         .filter(bill => bill.status === 'paid' && isWithinInterval(new Date(bill.createdAt), { start: monthStart, end: monthEnd }))
@@ -51,9 +58,96 @@ const FinancialReportsView: React.FC = () => {
     return months;
   }, [invoices, vendorBills, expenses]);
 
+  // Calculate Expense Breakdown
+  const expenseBreakdown = useMemo(() => {
+    const breakdown: Record<string, number> = {
+      'Labor': 0,
+      'Materials': 0,
+      'Fuel': 0,
+      'Office': 0,
+      'Other': 0
+    };
+
+    // Labor from work sessions (estimated)
+    workSessions.forEach(session => {
+      const profile = technicianPayProfiles.find(p => p.technicianId === session.technicianId);
+      const rate = session.sessionType === 'travel' ? (profile?.travelRate || 15) : (profile?.hourlyRate || 25);
+      breakdown['Labor'] += (session.durationMinutes / 60) * rate;
+    });
+
+    // Materials from vendor bills
+    vendorBills.forEach(bill => {
+      const cat = bill.category?.toLowerCase() || '';
+      if (cat.includes('parts') || cat.includes('material')) {
+        breakdown['Materials'] += bill.total;
+      } else if (cat.includes('fuel')) {
+        breakdown['Fuel'] += bill.total;
+      } else if (cat.includes('office')) {
+        breakdown['Office'] += bill.total;
+      } else {
+        breakdown['Other'] += bill.total;
+      }
+    });
+
+    // General expenses
+    expenses.forEach(exp => {
+      const cat = exp.category?.toLowerCase() || '';
+      if (cat === 'fuel') breakdown['Fuel'] += exp.total;
+      else if (cat === 'office') breakdown['Office'] += exp.total;
+      else if (cat === 'subcontractor') breakdown['Labor'] += exp.total;
+      else breakdown['Other'] += exp.total;
+    });
+
+    return Object.entries(breakdown)
+      .map(([name, value]) => ({ name, value }))
+      .filter(item => item.value > 0);
+  }, [workSessions, vendorBills, expenses, technicianPayProfiles]);
+
+  // Calculate Top Revenue Sources
+  const revenueSources = useMemo(() => {
+    const sources: Record<string, number> = {};
+    invoices.forEach(inv => {
+      if (inv.status === 'paid' || inv.status === 'partially_paid') {
+        const category = inv.lineItems?.[0]?.description || 'General Service';
+        sources[category] = (sources[category] || 0) + (inv.amountPaid || inv.total);
+      }
+    });
+
+    const total = Object.values(sources).reduce((sum, v) => sum + v, 0);
+    return Object.entries(sources)
+      .map(([name, value]) => ({ 
+        name, 
+        value, 
+        percent: total > 0 ? Math.round((value / total) * 100) : 0 
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 4);
+  }, [invoices]);
+
   const totalRevenue = pnlData.reduce((sum, m) => sum + m.revenue, 0);
   const totalExpenses = pnlData.reduce((sum, m) => sum + m.expenses, 0);
   const totalProfit = totalRevenue - totalExpenses;
+
+  // Calculate Tax Liability
+  const taxLiability = useMemo(() => {
+    const salesTax = invoices.reduce((sum, inv) => {
+      const tax = inv.tax || 0;
+      return sum + tax;
+    }, 0);
+
+    const purchaseTax = vendorBills.reduce((sum, bill) => {
+      // Assuming 5% tax if not specified for bills
+      return sum + (bill.total * 0.05);
+    }, 0) + expenses.reduce((sum, exp) => sum + (exp.total * 0.05), 0);
+
+    return {
+      salesTax,
+      purchaseTax,
+      netPayable: Math.max(0, salesTax - purchaseTax),
+      taxableSales: invoices.reduce((sum, inv) => sum + inv.subtotal, 0),
+      incomeTax: Math.max(0, (totalRevenue - totalExpenses) * 0.25)
+    };
+  }, [invoices, vendorBills, expenses, totalRevenue, totalExpenses]);
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen space-y-6">
@@ -135,13 +229,7 @@ const FinancialReportsView: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <RePieChart>
                     <Pie
-                      data={[
-                        { name: 'Labor', value: 4500 },
-                        { name: 'Materials', value: 3200 },
-                        { name: 'Fuel', value: 1200 },
-                        { name: 'Office', value: 800 },
-                        { name: 'Other', value: 500 },
-                      ]}
+                      data={expenseBreakdown}
                       cx="50%"
                       cy="50%"
                       innerRadius={60}
@@ -161,12 +249,7 @@ const FinancialReportsView: React.FC = () => {
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
               <h3 className="font-bold text-gray-900 mb-6">Top Revenue Sources</h3>
               <div className="space-y-4">
-                {[
-                  { name: 'HVAC Maintenance', value: 12400, percent: 45 },
-                  { name: 'Plumbing Repairs', value: 8200, percent: 30 },
-                  { name: 'Electrical Installs', value: 5400, percent: 20 },
-                  { name: 'Other Services', value: 1350, percent: 5 },
-                ].map((item, i) => (
+                {revenueSources.map((item, i) => (
                   <div key={i} className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="font-medium text-gray-700">{item.name}</span>
@@ -177,6 +260,9 @@ const FinancialReportsView: React.FC = () => {
                     </div>
                   </div>
                 ))}
+                {revenueSources.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-8">No revenue data available</p>
+                )}
               </div>
             </div>
           </div>
@@ -188,7 +274,9 @@ const FinancialReportsView: React.FC = () => {
           <div className="flex justify-between items-center mb-8">
             <h3 className="font-bold text-gray-900">Tax Liability Summary</h3>
             <div className="flex gap-2">
-              <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold">Q1 2026</span>
+              <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold">
+                {format(new Date(), 'yyyy')} YTD
+              </span>
             </div>
           </div>
           
@@ -196,17 +284,17 @@ const FinancialReportsView: React.FC = () => {
             <div className="space-y-6">
               <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <p className="text-sm text-gray-500 mb-1">Sales Tax Collected</p>
-                <p className="text-2xl font-bold text-gray-900">$4,230.50</p>
-                <p className="text-xs text-gray-400 mt-1">From $52,881.25 in taxable sales</p>
+                <p className="text-2xl font-bold text-gray-900">${taxLiability.salesTax.toLocaleString()}</p>
+                <p className="text-xs text-gray-400 mt-1">From ${taxLiability.taxableSales.toLocaleString()} in taxable sales</p>
               </div>
               <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <p className="text-sm text-gray-500 mb-1">Purchase Tax Paid</p>
-                <p className="text-2xl font-bold text-gray-900">$1,120.20</p>
+                <p className="text-2xl font-bold text-gray-900">${taxLiability.purchaseTax.toLocaleString()}</p>
                 <p className="text-xs text-gray-400 mt-1">From vendor bills and expenses</p>
               </div>
               <div className="p-6 bg-blue-600 rounded-xl text-white">
                 <p className="text-sm opacity-80 mb-1">Estimated Net Tax Payable</p>
-                <p className="text-3xl font-bold">$3,110.30</p>
+                <p className="text-3xl font-bold">${taxLiability.netPayable.toLocaleString()}</p>
                 <button className="mt-4 w-full py-2 bg-white text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors">
                   Generate Remittance Report
                 </button>

@@ -106,7 +106,7 @@ interface AppContextType {
   updateQuoteStatus: (id: string, status: Quote['status']) => Promise<void>;
   createInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => Promise<void>;
   updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<void>;
-  updateInvoiceStatus: (id: string, status: Invoice['status'], paymentMethod?: string) => Promise<void>;
+  updateInvoiceStatus: (id: string, status: Invoice['status'] | 'partially_paid', paymentMethod?: string) => Promise<void>;
   updateCurrentUserProfile: (updates: any) => Promise<void>;
   createClient: (client: Omit<Client, 'id'>) => Promise<void>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
@@ -1823,13 +1823,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const invoice = invoices.find(i => i.id === payment.invoiceId);
       if (!invoice) throw new Error('Invoice not found');
 
-      // Mock Stripe Integration
-      // In a real app, we would call Stripe API here
-      console.log(`Simulating Stripe payment for ${payment.amount} ${payment.currency}...`);
-      const isSuccessful = Math.random() > 0.05; // 95% success rate simulation
-
-      if (!isSuccessful) {
-        throw new Error('Payment processing failed. Please check your card details and try again.');
+      // Real-world logic: If it's a credit card, we'd call a processor.
+      // For this app, we'll assume manual recording for cash/check/transfer is always successful.
+      // For credit_card, we'll keep a simplified success check but remove the random failure for now to make it "production-ready" in logic.
+      if (payment.method === 'credit_card') {
+        console.log(`Processing credit card payment for ${payment.amount} ${payment.currency}...`);
+        // In a real production app, this is where Stripe/Square SDK would be called.
       }
 
       const newPayment: Omit<PaymentRecord, 'id'> = {
@@ -1840,23 +1839,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recordedByName: currentUser.fullName,
         recordedByRole: role,
         status: 'completed' as const,
-        transactionId: payment.transactionId || `stripe_${Math.random().toString(36).substring(7)}`
+        transactionId: payment.transactionId || `${payment.method}_${Math.random().toString(36).substring(7)}`
       };
       const paymentRef = await addDoc(collection(db, 'paymentRecords'), newPayment);
       
-      const paymentIds = [...(invoice.paymentIds || []), paymentRef.id];
-      // We need to fetch the actual payment records to calculate the total paid
-      // For now, we'll use the local state which might be slightly behind but usually okay
-      const totalPaid = paymentIds.reduce((sum, pid) => {
-        const p = paymentRecords.find(pr => pr.id === pid);
-        return sum + (p?.amount || 0);
-      }, payment.amount);
+      // Calculate total paid for this invoice by summing all related payment records
+      // We include the new payment we just added
+      const relatedPayments = paymentRecords.filter(pr => pr.invoiceId === invoice.id);
+      const totalPaid = relatedPayments.reduce((sum, p) => sum + p.amount, 0) + payment.amount;
 
       const balanceRemaining = Math.max(0, invoice.total - totalPaid);
-      const status = totalPaid >= invoice.total ? 'paid' : 'unpaid';
+      const status = totalPaid >= invoice.total ? 'paid' : (totalPaid > 0 ? 'partially_paid' : 'unpaid');
       
       await updateDoc(doc(db, 'invoices', invoice.id), { 
-        paymentIds, 
         status,
         amountPaid: totalPaid,
         balanceRemaining,
@@ -1867,7 +1862,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await logFinancialActivity({
         type: 'payment_received',
         amount: payment.amount,
-        description: `Payment received for invoice #${invoice.id.slice(-6)}`,
+        description: `Payment received for invoice #${invoice.id.slice(-6)} via ${payment.method}`,
         referenceId: invoice.id,
         referenceType: 'invoice'
       });

@@ -4,7 +4,7 @@ import {
   Search, Filter, Download, Mail, Phone, 
   DollarSign, Clock, AlertCircle, CheckCircle2,
   ChevronRight, ArrowUpRight, User, FileText,
-  Calendar, PieChart, BarChart3
+  Calendar, PieChart, BarChart3, Plus
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format, differenceInDays } from 'date-fns';
@@ -14,6 +14,11 @@ const AccountsReceivableView: React.FC = () => {
   const { invoices, paymentRecords, clients } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'unpaid' | 'overdue' | 'paid'>('all');
+
+  const [showRecordPayment, setShowRecordPayment] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+
+  const { recordPayment } = useApp();
 
   // Calculate Aging Buckets
   const agingBuckets = useMemo(() => {
@@ -150,9 +155,21 @@ const AccountsReceivableView: React.FC = () => {
                     <StatusBadge status={inv.status} />
                   </td>
                   <td className="px-6 py-4">
-                    <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Mail className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => {
+                          setSelectedInvoice(inv);
+                          setShowRecordPayment(true);
+                        }}
+                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                        title="Record Payment"
+                      >
+                        <DollarSign className="w-4 h-4" />
+                      </button>
+                      <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <Mail className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -167,6 +184,81 @@ const AccountsReceivableView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Record Payment Modal */}
+      {showRecordPayment && selectedInvoice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+          >
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">Record Payment</h2>
+              <button onClick={() => setShowRecordPayment(false)} className="text-gray-400 hover:text-gray-600">
+                <Plus className="w-6 h-6 rotate-45" />
+              </button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              await recordPayment({
+                invoiceId: selectedInvoice.id,
+                clientId: selectedInvoice.clientId,
+                ticketId: selectedInvoice.ticketId,
+                amount: parseFloat(formData.get('amount') as string),
+                currency: 'USD',
+                method: formData.get('method') as any,
+                status: 'completed',
+                transactionId: formData.get('transactionId') as string,
+                notes: formData.get('notes') as string
+              });
+              setShowRecordPayment(false);
+            }} className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Invoice #{selectedInvoice.id.slice(-6)}</p>
+                <p className="text-lg font-bold text-gray-900">Balance: ${(selectedInvoice.balanceRemaining ?? selectedInvoice.total).toLocaleString()}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount *</label>
+                <input 
+                  name="amount" 
+                  type="number" 
+                  step="0.01" 
+                  required 
+                  defaultValue={selectedInvoice.balanceRemaining ?? selectedInvoice.total}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                <select name="method" required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                  <option value="credit_card">Credit Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="check">Check</option>
+                  <option value="cash">Cash</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transaction ID / Reference</label>
+                <input name="transactionId" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea name="notes" rows={2} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowRecordPayment(false)} className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">
+                  Record Payment
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
