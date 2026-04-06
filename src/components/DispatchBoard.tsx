@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../AppContext';
-import { Ticket, JobStatus } from '../types';
+import { Ticket, JobStatus, DispatchSuggestion } from '../types';
 import { STATUS_LABELS } from '../constants';
 import { StatusBadge, UrgencyBadge } from './Badges';
-import { Search, Filter, MoreVertical, Calendar, User, MapPin, Clipboard } from 'lucide-react';
+import { Search, Filter, MoreVertical, Calendar, User, MapPin, Clipboard, Sparkles, AlertTriangle, Clock, CheckCircle2, ArrowRight } from 'lucide-react';
 import { cn, formatDate } from '../lib/utils';
 import { TicketDetail } from './TicketDetail';
+import { AppointmentProposalModal } from './AppointmentProposalModal';
 
 export const DispatchBoard: React.FC = () => {
-  const { tickets, technicians, approveTicket, rejectTicket, assignTechnician, rescheduleTicket } = useApp();
+  const { 
+    tickets, technicians, appointmentRecords, technicianAvailabilityRules,
+    approveTicket, rejectTicket, assignTechnician, rescheduleTicket,
+    getTechnicianCapacityForDay 
+  } = useApp();
   const [view, setView] = useState<'board' | 'list'>('board');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [proposalTicket, setProposalTicket] = useState<Ticket | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>('all');
@@ -18,9 +25,52 @@ export const DispatchBoard: React.FC = () => {
   const [techFilter, setTechFilter] = useState<string | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
 
-  const columns: JobStatus[] = ['pending_review', 'approved', 'scheduled', 'in_progress', 'waiting_on_parts'];
+  const columns: JobStatus[] = ['pending_review', 'approved', 'proposed', 'scheduled', 'in_progress', 'waiting_on_parts'];
 
   const categories = Array.from(new Set(tickets.map(t => t.category))).filter(Boolean);
+
+  // Smart Dispatch Logic
+  const getSuggestions = (ticket: Ticket): DispatchSuggestion[] => {
+    if (ticket.status !== 'approved' && ticket.status !== 'pending_review') return [];
+
+    return technicians.map(tech => {
+      let score = 50;
+      const reasons: { type: 'specialty_match' | 'proximity' | 'availability' | 'load' | 'rating'; text: string; positive: boolean }[] = [];
+
+      // Specialty match
+      if (tech.specialties?.includes(ticket.category)) {
+        score += 30;
+        reasons.push({ type: 'specialty_match', text: 'Specialty match', positive: true });
+      }
+
+      // Availability check
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0];
+      const capacity = getTechnicianCapacityForDay(tech.id, dateStr);
+      const capacityValue = typeof capacity === 'number' ? capacity : capacity.availableMinutes;
+      
+      if (capacityValue > 240) {
+        score += 20;
+        reasons.push({ type: 'availability', text: 'High capacity today', positive: true });
+      } else if (capacityValue < 60) {
+        score -= 20;
+        reasons.push({ type: 'availability', text: 'Low capacity today', positive: false });
+      }
+
+      // Current status
+      const isOnline = tech.status === 'available';
+      if (isOnline) {
+        score += 10;
+        reasons.push({ type: 'availability', text: 'Currently online', positive: true });
+      }
+
+      return {
+        technicianId: tech.id,
+        score,
+        reasons
+      };
+    }).sort((a, b) => b.score - a.score).slice(0, 2);
+  };
 
   const filteredTickets = tickets.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -171,10 +221,66 @@ export const DispatchBoard: React.FC = () => {
                         <MapPin className="h-3.5 w-3.5 text-gray-400" />
                         <span className="truncate">{ticket.propertyNickname}</span>
                       </div>
+                      
+                      {/* Smart Recommendations */}
+                      {(ticket.status === 'pending_review' || ticket.status === 'approved') && !ticket.assignedTechnicianId && (
+                        <div className="mt-3 pt-3 border-t border-gray-50 space-y-2">
+                          <div className="flex items-center gap-1 text-[8px] font-black text-blue-600 uppercase tracking-widest">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            Recommended
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            {getSuggestions(ticket).map(suggestion => {
+                              const tech = technicians.find(t => t.id === suggestion.technicianId);
+                              return (
+                                <div key={suggestion.technicianId} className="flex items-center justify-between bg-blue-50/50 p-1.5 rounded-lg border border-blue-100/50">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white">
+                                      {tech?.fullName.charAt(0)}
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold text-gray-900">{tech?.fullName}</span>
+                                      <span className="text-[7px] text-blue-600 font-medium">{suggestion.reasons[0].text}</span>
+                                    </div>
+                                  </div>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      assignTechnician(ticket.id!, suggestion.technicianId, tech?.fullName || 'Technician');
+                                    }}
+                                    className="p-1 hover:bg-blue-100 rounded-md transition-colors"
+                                  >
+                                    <ArrowRight className="w-3 h-3 text-blue-600" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {ticket.scheduledDate && (
                         <div className="flex items-center gap-2 text-[10px] text-blue-600 font-bold bg-blue-50 w-fit px-2 py-1 rounded-md">
                           <Calendar className="h-3.5 w-3.5" />
                           <span>{formatDate(ticket.scheduledDate)} @ {ticket.scheduledTime}</span>
+                        </div>
+                      )}
+                      
+                      {/* Appointment Status for Scheduled/Proposed */}
+                      {(ticket.status === 'scheduled' || ticket.status === 'proposed' || ticket.status === 'reschedule_requested') && (
+                        <div className="mt-2 flex items-center gap-2">
+                          {ticket.status === 'proposed' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest">
+                              <Clock className="w-2.5 h-2.5" />
+                              Awaiting Client
+                            </span>
+                          )}
+                          {ticket.status === 'reschedule_requested' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[8px] font-black uppercase tracking-widest">
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              Reschedule Req
+                            </span>
+                          )}
                         </div>
                       )}
                       <div className="flex flex-wrap gap-1.5 mt-2">
@@ -302,6 +408,16 @@ export const DispatchBoard: React.FC = () => {
         <TicketDetail 
           ticket={selectedTicket} 
           onClose={() => setSelectedTicket(null)} 
+        />
+      )}
+
+      {showProposalModal && proposalTicket && (
+        <AppointmentProposalModal
+          ticket={proposalTicket}
+          onClose={() => {
+            setShowProposalModal(false);
+            setProposalTicket(null);
+          }}
         />
       )}
     </div>

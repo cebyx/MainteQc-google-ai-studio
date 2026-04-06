@@ -5,6 +5,7 @@ export type JobStatus =
   | 'pending_review'
   | 'approved'
   | 'rejected'
+  | 'proposed'
   | 'scheduled'
   | 'on_the_way'
   | 'arrived'
@@ -12,7 +13,11 @@ export type JobStatus =
   | 'waiting_on_parts'
   | 'completed'
   | 'cancelled'
-  | 'unable_to_complete';
+  | 'unable_to_complete'
+  | 'missed'
+  | 'reschedule_requested';
+
+export type AppointmentStatus = 'proposed' | 'confirmed' | 'reschedule_requested' | 'missed' | 'completed' | 'cancelled';
 
 export interface BrandSettings {
   companyName: string;
@@ -64,6 +69,68 @@ export interface Technician {
   specialties: string[];
   status: 'available' | 'busy' | 'offline';
   notes: string;
+  avatar?: string;
+  rating?: number;
+  completedJobs?: number;
+}
+
+export interface TechnicianAvailabilityRule {
+  id: string;
+  technicianId: string;
+  dayOfWeek: number; // 0-6
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  enabled: boolean;
+}
+
+export interface BlockedSlot {
+  id: string;
+  technicianId: string;
+  title: string;
+  description: string;
+  startTime: string; // ISO
+  endTime: string; // ISO
+  type: 'pto' | 'lunch' | 'break' | 'personal' | 'other';
+}
+
+export interface AppointmentRecord {
+  id: string;
+  ticketId: string;
+  technicianId: string;
+  clientId: string;
+  startTime: string; // ISO
+  endTime: string; // ISO
+  status: AppointmentStatus;
+  proposedBy: UserRole;
+  confirmedAt?: string;
+  rescheduleReason?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduleConflict {
+  id: string;
+  type: 'overlap' | 'outside_availability' | 'overload' | 'travel_buffer_violation';
+  severity: 'low' | 'medium' | 'high';
+  description: string;
+  affectedIds: string[]; // Ticket or Appointment IDs
+  technicianId: string;
+  date: string;
+}
+
+export interface DispatchSuggestion {
+  technicianId: string;
+  score: number;
+  reasons: {
+    type: 'specialty_match' | 'proximity' | 'availability' | 'load' | 'rating';
+    text: string;
+    positive: boolean;
+  }[];
+  suggestedSlot?: {
+    startTime: string;
+    endTime: string;
+  };
 }
 
 export interface Ticket {

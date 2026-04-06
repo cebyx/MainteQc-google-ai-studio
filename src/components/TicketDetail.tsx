@@ -28,7 +28,10 @@ import {
   Play,
   Square,
   Pause,
-  Zap
+  Zap,
+  Sparkles,
+  Check,
+  X
 } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 import { STATUS_LABELS } from '../constants';
@@ -36,6 +39,7 @@ import { AttachmentsPanel } from './AttachmentsPanel';
 import { PartsUsedPanel } from './PartsUsedPanel';
 import { CloseoutPanel } from './CloseoutPanel';
 import { PhotoGallery } from './PhotoGallery';
+import { AppointmentProposalModal } from './AppointmentProposalModal';
 
 interface TicketDetailProps {
   ticket: Ticket;
@@ -181,12 +185,14 @@ const WorkAuthorizationPanel: React.FC<{ ticket: Ticket; allowSign: boolean }> =
 };
 
 const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; editedTicket: Partial<Ticket>; handleChange: (f: keyof Ticket, v: any) => void; handleSave: () => void; handleStatusChange: (s: JobStatus) => void; onClose: () => void }> = ({ ticket, currentTicket, editedTicket, handleChange, handleSave, handleStatusChange, onClose }) => {
-  const { technicians, approveTicket, rejectTicket, quotes, invoices, createQuote, updateQuote, createInvoice, updateInvoice } = useApp();
+  const { technicians, approveTicket, rejectTicket, quotes, invoices, createQuote, updateQuote, createInvoice, updateInvoice, appointmentRecords } = useApp();
   const [editingFinancial, setEditingFinancial] = useState<'quote' | 'invoice' | null>(null);
+  const [showProposalModal, setShowProposalModal] = useState(false);
   
   const isPending = ticket.status === 'pending_review';
   const ticketQuote = quotes.find(q => q.ticketId === ticket.id);
   const ticketInvoice = invoices.find(i => i.ticketId === ticket.id);
+  const activeAppointment = appointmentRecords.find(a => a.ticketId === ticket.id && (a.status === 'proposed' || a.status === 'confirmed'));
 
   const handleAddLineItem = (type: 'quote' | 'invoice') => {
     const financial = type === 'quote' ? ticketQuote : ticketInvoice;
@@ -346,7 +352,7 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
                 ))}
               </select>
             </div>
-            <div className="pt-2">
+            <div className="pt-2 flex flex-col gap-2">
               <button 
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95"
                 onClick={handleSave}
@@ -354,9 +360,26 @@ const AdminTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; edite
               >
                 Update Dispatch
               </button>
+              
+              {!ticket.scheduledDate && (
+                <button 
+                  onClick={() => setShowProposalModal(true)}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-bold text-blue-600 hover:bg-blue-100 transition-all"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Propose Appointment
+                </button>
+              )}
             </div>
           </div>
         </section>
+
+        {showProposalModal && (
+          <AppointmentProposalModal
+            ticket={ticket}
+            onClose={() => setShowProposalModal(false)}
+          />
+        )}
 
         <section className="rounded-2xl bg-gray-50 p-6 border border-gray-200">
           <h4 className="flex items-center gap-2 font-bold text-gray-900 mb-4">
@@ -798,12 +821,70 @@ const TechnicianTicketDetail: React.FC<{ ticket: Ticket; currentTicket: Ticket; 
 };
 
 const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
+  const { appointmentRecords, confirmAppointment, requestAppointmentReschedule } = useApp();
+  const activeAppointment = appointmentRecords.find(a => a.ticketId === ticket.id && a.status === 'proposed');
+
   return (
     <div className="space-y-8">
       <section>
-        <h3 className="text-xl font-bold text-gray-900 mb-2">{ticket.title}</h3>
-        <p className="text-gray-600 leading-relaxed">{ticket.description}</p>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xl font-bold text-gray-900">{ticket.title}</h3>
+          <UrgencyBadge urgency={ticket.urgency} />
+        </div>
+        <p className="text-gray-600 leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">{ticket.description}</p>
       </section>
+
+      {/* Appointment Confirmation for Client */}
+      {activeAppointment && (
+        <section className="rounded-2xl bg-blue-600 p-6 text-white shadow-xl shadow-blue-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
+              <Calendar className="h-6 w-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-lg">Confirm Appointment</h4>
+              <p className="text-blue-100 text-xs">We've proposed a time for your service.</p>
+            </div>
+          </div>
+          
+          <div className="bg-white/10 rounded-xl p-4 mb-6 border border-white/20">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">Proposed Time</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">Duration</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xl font-bold">
+                {formatDate(activeAppointment.startTime)}
+              </div>
+              <div className="text-xl font-bold">
+                {Math.round((new Date(activeAppointment.endTime).getTime() - new Date(activeAppointment.startTime).getTime()) / (1000 * 60))}m
+              </div>
+            </div>
+            {activeAppointment.notes && (
+              <div className="mt-3 pt-3 border-t border-white/10 text-sm italic text-blue-50">
+                "{activeAppointment.notes}"
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={() => confirmAppointment(activeAppointment.id)}
+              className="flex-1 bg-white text-blue-600 py-3 rounded-xl font-bold text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Check className="h-4 w-4" />
+              Confirm Time
+            </button>
+            <button 
+              onClick={() => requestAppointmentReschedule(activeAppointment.id, "Client requested different time")}
+              className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-bold text-sm hover:bg-blue-400 transition-colors flex items-center justify-center gap-2"
+            >
+              <X className="h-4 w-4" />
+              Reschedule
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-8">
         <PhotoGallery ticketId={ticket.id} allowUpload={false} />
@@ -831,7 +912,7 @@ const ClientTicketDetail: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
 };
 
 export const TicketDetail: React.FC<TicketDetailProps> = ({ ticket, onClose }) => {
-  const { role, updateTicket, rescheduleTicket, assignTechnician, activities, clients, properties, messages } = useApp();
+  const { role, updateTicket, rescheduleTicket, assignTechnician, activities, clients, properties, messages, requestAppointmentReschedule } = useApp();
   const [editedTicket, setEditedTicket] = useState<Partial<Ticket>>({});
 
   const ticketActivities = activities

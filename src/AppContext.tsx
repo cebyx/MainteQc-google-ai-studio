@@ -3,7 +3,8 @@ import {
   UserRole, Client, Technician, BrandSettings, Ticket, Property, Quote, Invoice, Message, 
   ActivityEvent, Attachment, MaterialUsed, ServiceSummary, ClientAccount, ClientMember, 
   MaintenancePlan, RecurringGenerationLog, ApprovalRecord, PaymentRecord, ClientInvitation, ReminderEvent, AuthorizationRecord,
-  WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction, StockMovement
+  WorkSession, InventoryItem, TechnicianStock, PartsRequest, ChecklistTemplate, TicketChecklist, PendingSyncAction, StockMovement,
+  TechnicianAvailabilityRule, BlockedSlot, AppointmentRecord, ScheduleConflict, DispatchSuggestion
 } from './types';
 import { auth, db, googleProvider, storage } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -80,6 +81,9 @@ interface AppContextType {
   ticketChecklists: TicketChecklist[];
   pendingSyncQueue: PendingSyncAction[];
   stockMovements: StockMovement[];
+  technicianAvailabilityRules: TechnicianAvailabilityRule[];
+  technicianBlockedSlots: BlockedSlot[];
+  appointmentRecords: AppointmentRecord[];
   loading: boolean;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt'>) => void;
@@ -163,6 +167,18 @@ interface AppContextType {
   markPartsRequestOrdered: (requestId: string, adminNotes?: string) => Promise<void>;
   markPartsRequestReceived: (requestId: string, adminNotes?: string) => Promise<void>;
   cancelPartsRequest: (requestId: string, adminNotes?: string) => Promise<void>;
+  
+  // Scheduling & Dispatch
+  createAppointmentProposal: (proposal: Omit<AppointmentRecord, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'proposedBy'>) => Promise<void>;
+  confirmAppointment: (appointmentId: string) => Promise<void>;
+  requestAppointmentReschedule: (appointmentId: string, reason: string) => Promise<void>;
+  cancelAppointment: (appointmentId: string, reason?: string) => Promise<void>;
+  createBlockedSlot: (slot: Omit<BlockedSlot, 'id'>) => Promise<void>;
+  updateBlockedSlot: (id: string, updates: Partial<BlockedSlot>) => Promise<void>;
+  removeBlockedSlot: (id: string) => Promise<void>;
+  updateTechnicianAvailabilityRule: (rule: TechnicianAvailabilityRule) => Promise<void>;
+  getTechnicianCapacityForDay: (technicianId: string, date: string) => { totalMinutes: number; bookedMinutes: number; availableMinutes: number };
+  
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthReady: boolean;
@@ -206,6 +222,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [ticketChecklists, setTicketChecklists] = useState<TicketChecklist[]>([]);
   const [pendingSyncQueue, setPendingSyncQueue] = useState<PendingSyncAction[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [technicianAvailabilityRules, setTechnicianAvailabilityRules] = useState<TechnicianAvailabilityRule[]>([]);
+  const [technicianBlockedSlots, setTechnicianBlockedSlots] = useState<BlockedSlot[]>([]);
+  const [appointmentRecords, setAppointmentRecords] = useState<AppointmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Test connection on boot
@@ -606,6 +625,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setTicketChecklists(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TicketChecklist)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'ticketChecklists'));
 
+    // Listen to Technician Availability Rules
+    const unsubAvailability = onSnapshot(collection(db, 'technicianAvailabilityRules'), (snapshot) => {
+      setTechnicianAvailabilityRules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TechnicianAvailabilityRule)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'technicianAvailabilityRules'));
+
+    // Listen to Blocked Slots
+    const unsubBlocked = onSnapshot(collection(db, 'technicianBlockedSlots'), (snapshot) => {
+      setTechnicianBlockedSlots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlockedSlot)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'technicianBlockedSlots'));
+
+    // Listen to Appointment Records
+    let appointmentsQuery;
+    if (role === 'ADMIN') {
+      appointmentsQuery = collection(db, 'appointmentRecords');
+    } else if (role === 'TECHNICIAN') {
+      appointmentsQuery = query(collection(db, 'appointmentRecords'), where('technicianId', '==', currentUser.id));
+    } else {
+      appointmentsQuery = query(collection(db, 'appointmentRecords'), where('clientId', '==', currentUser.id));
+    }
+    const unsubAppointments = onSnapshot(appointmentsQuery, (snapshot) => {
+      setAppointmentRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentRecord)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'appointmentRecords'));
+
     setLoading(false);
 
     return () => {
@@ -635,6 +677,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubRequests();
       unsubChecklistTemplates();
       unsubTicketChecklists();
+      unsubAvailability();
+      unsubBlocked();
+      unsubAppointments();
     };
   }, [isAuthReady, currentUser, role]);
 
@@ -678,6 +723,213 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => clearInterval(interval);
   }, [role, maintenancePlans, recurringGenerationLog]);
+
+  const createAppointmentProposal = async (proposal: Omit<AppointmentRecord, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'proposedBy'>) => {
+    try {
+      const now = new Date().toISOString();
+      const newAppointment: Omit<AppointmentRecord, 'id'> = {
+        ...proposal,
+        status: 'proposed',
+        proposedBy: role,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const docRef = await addDoc(collection(db, 'appointmentRecords'), newAppointment);
+      
+      // Update ticket status to proposed
+      await updateTicket(proposal.ticketId, { status: 'proposed' });
+      
+      await logActivity({
+        ticketId: proposal.ticketId,
+        clientId: proposal.clientId,
+        type: 'appointment_proposed',
+        description: `New appointment proposed for ${new Date(proposal.startTime).toLocaleString()}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+
+      await createSystemMessage(proposal.ticketId, proposal.clientId, 'CLIENT', `A new appointment has been proposed for your service request #${proposal.ticketId.slice(-6)}.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'appointmentRecords');
+    }
+  };
+
+  const confirmAppointment = async (appointmentId: string) => {
+    try {
+      const appointment = appointmentRecords.find(a => a.id === appointmentId);
+      if (!appointment) return;
+
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'appointmentRecords', appointmentId), {
+        status: 'confirmed',
+        confirmedAt: now,
+        updatedAt: now,
+      });
+
+      // Update ticket status to scheduled
+      await updateTicket(appointment.ticketId, { 
+        status: 'scheduled',
+        scheduledDate: appointment.startTime.split('T')[0],
+        scheduledTime: appointment.startTime.split('T')[1].substring(0, 5),
+        assignedTechnicianId: appointment.technicianId,
+        assignedTechnicianName: technicians.find(t => t.id === appointment.technicianId)?.fullName || 'Assigned Technician'
+      });
+
+      await logActivity({
+        ticketId: appointment.ticketId,
+        clientId: appointment.clientId,
+        type: 'appointment_confirmed',
+        description: `Appointment confirmed for ${new Date(appointment.startTime).toLocaleString()}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+
+      // Notify technician
+      await createSystemMessage(appointment.ticketId, appointment.technicianId, 'TECHNICIAN', `A new job has been confirmed for ${new Date(appointment.startTime).toLocaleString()}.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `appointmentRecords/${appointmentId}`);
+    }
+  };
+
+  const requestAppointmentReschedule = async (appointmentId: string, reason: string) => {
+    try {
+      const appointment = appointmentRecords.find(a => a.id === appointmentId);
+      if (!appointment) return;
+
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'appointmentRecords', appointmentId), {
+        status: 'reschedule_requested',
+        rescheduleReason: reason,
+        updatedAt: now,
+      });
+
+      await updateTicket(appointment.ticketId, { status: 'reschedule_requested' });
+
+      await logActivity({
+        ticketId: appointment.ticketId,
+        clientId: appointment.clientId,
+        type: 'reschedule_requested',
+        description: `Reschedule requested for appointment on ${new Date(appointment.startTime).toLocaleString()}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+
+      // Notify admin
+      // In a real app, we'd have a way to notify all admins or a specific dispatcher
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `appointmentRecords/${appointmentId}`);
+    }
+  };
+
+  const cancelAppointment = async (appointmentId: string, reason?: string) => {
+    try {
+      const appointment = appointmentRecords.find(a => a.id === appointmentId);
+      if (!appointment) return;
+
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'appointmentRecords', appointmentId), {
+        status: 'cancelled',
+        notes: reason ? `Cancelled: ${reason}` : 'Cancelled',
+        updatedAt: now,
+      });
+
+      await updateTicket(appointment.ticketId, { status: 'approved' }); // Back to approved but unscheduled
+
+      await logActivity({
+        ticketId: appointment.ticketId,
+        clientId: appointment.clientId,
+        type: 'appointment_cancelled',
+        description: `Appointment cancelled for ${new Date(appointment.startTime).toLocaleString()}`,
+        actorId: currentUser.id,
+        actorName: currentUser.fullName,
+        actorRole: role,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `appointmentRecords/${appointmentId}`);
+    }
+  };
+
+  const createBlockedSlot = async (slot: Omit<BlockedSlot, 'id'>) => {
+    try {
+      await addDoc(collection(db, 'technicianBlockedSlots'), slot);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'technicianBlockedSlots');
+    }
+  };
+
+  const updateBlockedSlot = async (id: string, updates: Partial<BlockedSlot>) => {
+    try {
+      await updateDoc(doc(db, 'technicianBlockedSlots', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `technicianBlockedSlots/${id}`);
+    }
+  };
+
+  const removeBlockedSlot = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'technicianBlockedSlots', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `technicianBlockedSlots/${id}`);
+    }
+  };
+
+  const updateTechnicianAvailabilityRule = async (rule: TechnicianAvailabilityRule) => {
+    try {
+      if (rule.id) {
+        await updateDoc(doc(db, 'technicianAvailabilityRules', rule.id), rule as any);
+      } else {
+        await addDoc(collection(db, 'technicianAvailabilityRules'), rule);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'technicianAvailabilityRules');
+    }
+  };
+
+  const getTechnicianCapacityForDay = (technicianId: string, date: string) => {
+    const rules = technicianAvailabilityRules.filter(r => r.technicianId === technicianId && r.enabled);
+    const dayOfWeek = new Date(date).getDay();
+    const dayRules = rules.filter(r => r.dayOfWeek === dayOfWeek);
+    
+    let totalMinutes = 0;
+    dayRules.forEach(r => {
+      const [startH, startM] = r.startTime.split(':').map(Number);
+      const [endH, endM] = r.endTime.split(':').map(Number);
+      totalMinutes += (endH * 60 + endM) - (startH * 60 + startM);
+    });
+
+    const dayAppointments = appointmentRecords.filter(a => 
+      a.technicianId === technicianId && 
+      a.startTime.startsWith(date) && 
+      (a.status === 'confirmed' || a.status === 'proposed')
+    );
+
+    let bookedMinutes = 0;
+    dayAppointments.forEach(a => {
+      const start = new Date(a.startTime);
+      const end = new Date(a.endTime);
+      bookedMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+    });
+
+    const dayBlocked = technicianBlockedSlots.filter(s => 
+      s.technicianId === technicianId && 
+      s.startTime.startsWith(date)
+    );
+
+    dayBlocked.forEach(s => {
+      const start = new Date(s.startTime);
+      const end = new Date(s.endTime);
+      bookedMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+    });
+
+    return {
+      totalMinutes,
+      bookedMinutes,
+      availableMinutes: Math.max(0, totalMinutes - bookedMinutes)
+    };
+  };
 
   const login = async () => {
     try {
@@ -2178,6 +2430,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       attachments, materialsUsed, serviceSummaries,
       clientAccounts, clientAccount, clientMembers, clientInvitations, maintenancePlans, paymentRecords, approvalRecords, reminderEvents, authorizationRecords, recurringGenerationLog,
       workSessions, inventoryItems, technicianStock, partsRequests, checklistTemplates, ticketChecklists, pendingSyncQueue, stockMovements,
+      technicianAvailabilityRules, technicianBlockedSlots, appointmentRecords,
       loading,
       uploadAttachment, deleteAttachment, updateAttachmentVisibility,
       addMaterialUsed, updateMaterialUsed, deleteMaterialUsed,
@@ -2189,6 +2442,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       recordPayment, listPaymentRecords, sendPaymentReminder, approveQuoteWithAuthorization, createWorkAuthorization, generateRecurringTicket,
       startWorkSession, stopWorkSession, createPartsRequest, updatePartsRequestStatus, updateInventoryQuantity, updateChecklistItem, enqueuePendingSyncAction, retryPendingSyncAction,
       createInventoryItem, updateInventoryItem, adjustTechnicianStock, transferStockToTechnician, createStockMovement, fulfillPartsRequest, markPartsRequestOrdered, markPartsRequestReceived, cancelPartsRequest,
+      createAppointmentProposal, confirmAppointment, requestAppointmentReschedule, cancelAppointment, createBlockedSlot, updateBlockedSlot, removeBlockedSlot, updateTechnicianAvailabilityRule, getTechnicianCapacityForDay,
       updateTicket, addTicket, addMessage, saveBrandSettings, createQuote, updateQuote, updateQuoteStatus, createInvoice, updateInvoice, updateInvoiceStatus, updateCurrentUserProfile,
       createClient, updateClient, createTechnician, updateTechnician, createProperty, updateProperty, logActivity, createNotification, createSystemMessage, approveTicket, rejectTicket, rescheduleTicket, assignTechnician,
       login, logout, isAuthReady, markMessageAsRead

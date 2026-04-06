@@ -77,7 +77,7 @@ service cloud.firestore {
       return hasRequiredFields(['title', 'description', 'status', 'urgency', 'category', 'clientId', 'clientName', 'propertyId', 'propertyNickname', 'serviceAddress', 'createdByEmail', 'createdAt']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.description is string && data.description.size() < 5000 &&
-             data.status in ['pending_review', 'approved', 'scheduled', 'on_the_way', 'arrived', 'in_progress', 'waiting_on_parts', 'completed', 'cancelled', 'rejected', 'unable_to_complete'] &&
+             data.status in ['pending_review', 'approved', 'proposed', 'scheduled', 'on_the_way', 'arrived', 'in_progress', 'waiting_on_parts', 'completed', 'cancelled', 'rejected', 'unable_to_complete', 'missed', 'reschedule_requested'] &&
              data.urgency in ['low', 'medium', 'high', 'emergency'] &&
              data.category is string && data.category.size() < 100 &&
              data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
@@ -401,6 +401,44 @@ service cloud.firestore {
              (!('notes' in data) || (data.notes is string && data.notes.size() < 1000));
     }
 
+    function isValidAvailabilityRule() {
+      let data = request.resource.data;
+      return hasRequiredFields(['technicianId', 'dayOfWeek', 'startTime', 'endTime', 'enabled']) &&
+             data.technicianId is string &&
+             data.dayOfWeek is number && data.dayOfWeek >= 0 && data.dayOfWeek <= 6 &&
+             data.startTime is string && data.startTime.matches("^\\d{2}:\\d{2}$") &&
+             data.endTime is string && data.endTime.matches("^\\d{2}:\\d{2}$") &&
+             data.enabled is bool;
+    }
+
+    function isValidBlockedSlot() {
+      let data = request.resource.data;
+      return hasRequiredFields(['technicianId', 'title', 'startTime', 'endTime', 'type']) &&
+             data.technicianId is string &&
+             data.title is string && data.title.size() > 0 &&
+             data.startTime is string &&
+             data.endTime is string &&
+             data.type in ['pto', 'lunch', 'break', 'personal', 'other'] &&
+             (!('description' in data) || data.description is string);
+    }
+
+    function isValidAppointment() {
+      let data = request.resource.data;
+      return hasRequiredFields(['ticketId', 'technicianId', 'clientId', 'startTime', 'endTime', 'status', 'proposedBy', 'createdAt', 'updatedAt']) &&
+             data.ticketId is string &&
+             data.technicianId is string &&
+             data.clientId is string &&
+             data.startTime is string &&
+             data.endTime is string &&
+             data.status in ['proposed', 'confirmed', 'reschedule_requested', 'missed', 'completed', 'cancelled'] &&
+             data.proposedBy in ['ADMIN', 'TECHNICIAN', 'CLIENT'] &&
+             data.createdAt is string &&
+             data.updatedAt is string &&
+             (!('confirmedAt' in data) || data.confirmedAt is string) &&
+             (!('rescheduleReason' in data) || data.rescheduleReason is string) &&
+             (!('notes' in data) || data.notes is string);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -628,6 +666,29 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid);
       allow create: if isAuthenticated() && isValidStockMovement() && (isAdmin() || isTechnician());
       allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /technicianAvailabilityRules/{ruleId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidAvailabilityRule();
+      allow delete: if isAdmin();
+    }
+
+    match /technicianBlockedSlots/{slotId} {
+      allow read: if isAuthenticated();
+      allow create, update: if (isAdmin() || isTechnician()) && isValidBlockedSlot();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.technicianId == request.auth.uid);
+    }
+
+    match /appointmentRecords/{appointmentId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.technicianId == request.auth.uid || resource.data.clientId == request.auth.uid);
+      allow create: if isAuthenticated() && (isAdmin() || isTechnician()) && isValidAppointment();
+      allow update: if isAuthenticated() && isValidAppointment() && (
+        isAdmin() || 
+        (resource.data.technicianId == request.auth.uid) ||
+        (resource.data.clientId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rescheduleReason', 'updatedAt']))
+      );
       allow delete: if isAdmin();
     }
   }

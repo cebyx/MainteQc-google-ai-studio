@@ -27,7 +27,7 @@
       "properties": {
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending_review", "approved", "scheduled", "on_the_way", "arrived", "in_progress", "waiting_on_parts", "completed", "cancelled", "rejected", "unable_to_complete"] },
+        "status": { "type": "string", "enum": ["pending_review", "approved", "proposed", "scheduled", "on_the_way", "arrived", "in_progress", "waiting_on_parts", "completed", "cancelled", "rejected", "unable_to_complete", "missed", "reschedule_requested"] },
         "urgency": { "type": "string", "enum": ["low", "medium", "high", "emergency"] },
         "category": { "type": "string" },
         "clientId": { "type": "string" },
@@ -360,6 +360,53 @@
         "notes": { "type": "string" }
       },
       "required": ["targetId", "targetType", "clientId", "sentAt", "sentBy", "type"]
+    },
+    "TechnicianAvailabilityRule": {
+      "title": "Technician Availability Rule",
+      "description": "Recurring availability for a technician",
+      "type": "object",
+      "properties": {
+        "technicianId": { "type": "string" },
+        "dayOfWeek": { "type": "integer" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["technicianId", "dayOfWeek", "startTime", "endTime", "enabled"]
+    },
+    "BlockedSlot": {
+      "title": "Blocked Slot",
+      "description": "A period when a technician is unavailable",
+      "type": "object",
+      "properties": {
+        "technicianId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "type": { "type": "string", "enum": ["pto", "lunch", "break", "personal", "other"] }
+      },
+      "required": ["technicianId", "title", "startTime", "endTime", "type"]
+    },
+    "AppointmentRecord": {
+      "title": "Appointment Record",
+      "description": "A scheduled appointment for a ticket",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "technicianId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["proposed", "confirmed", "reschedule_requested", "missed", "completed", "cancelled"] },
+        "proposedBy": { "type": "string", "enum": ["ADMIN", "TECHNICIAN", "CLIENT"] },
+        "confirmedAt": { "type": "string" },
+        "rescheduleReason": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["ticketId", "technicianId", "clientId", "startTime", "endTime", "status", "proposedBy", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -438,6 +485,18 @@
     "/authorizationRecords/{authId}": {
       "schema": { "$ref": "#/entities/AuthorizationRecord" },
       "description": "Stores work authorization records"
+    },
+    "/technicianAvailabilityRules/{ruleId}": {
+      "schema": { "$ref": "#/entities/TechnicianAvailabilityRule" },
+      "description": "Stores technician availability rules"
+    },
+    "/technicianBlockedSlots/{slotId}": {
+      "schema": { "$ref": "#/entities/BlockedSlot" },
+      "description": "Stores technician blocked time slots"
+    },
+    "/appointmentRecords/{appointmentId}": {
+      "schema": { "$ref": "#/entities/AppointmentRecord" },
+      "description": "Stores appointment records"
     }
   }
 }
